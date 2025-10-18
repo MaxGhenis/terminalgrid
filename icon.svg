@@ -1,0 +1,23 @@
+<svg width="128" height="128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="128" height="128" fill="#2C6496" rx="8"/>
+
+  <!-- Grid Container -->
+  <g transform="translate(16, 16)">
+    <!-- Top-left cell -->
+    <rect x="0" y="0" width="44" height="44" fill="#1E1E1E" rx="4"/>
+    <text x="10" y="30" fill="#39C6C0" font-family="monospace" font-size="24" font-weight="bold">&gt;</text>
+
+    <!-- Top-right cell -->
+    <rect x="52" y="0" width="44" height="44" fill="#1E1E1E" rx="4"/>
+    <text x="62" y="30" fill="#39C6C0" font-family="monospace" font-size="24" font-weight="bold">&gt;</text>
+
+    <!-- Bottom-left cell -->
+    <rect x="0" y="52" width="44" height="44" fill="#1E1E1E" rx="4"/>
+    <text x="10" y="82" fill="#39C6C0" font-family="monospace" font-size="24" font-weight="bold">&gt;</text>
+
+    <!-- Bottom-right cell -->
+    <rect x="52" y="52" width="44" height="44" fill="#1E1E1E" rx="4"/>
+    <text x="62" y="82" fill="#39C6C0" font-family="monospace" font-size="24" font-weight="bold">&gt;</text>
+  </g>
+</svg>

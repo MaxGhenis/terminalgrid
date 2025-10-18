@@ -4,6 +4,7 @@
   "description": "Terminal grid management with keyboard shortcuts and optional auto-launch for CLI tools (Claude Code, Aider, Codex, etc)",
   "version": "0.1.0",
   "publisher": "maxghenis",
+  "icon": "icon.svg",
   "engines": {
     "vscode": "^1.80.0"
   },
