@@ -222,7 +222,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 { label: 'Aider', description: 'AI pair programming with Git integration', value: 'aider' },
                 { label: 'Gemini CLI', description: 'Google\'s free AI coding assistant (60 req/min)', value: 'gemini-cli' },
                 { label: 'GitHub Copilot CLI', description: 'GitHub\'s terminal AI assistant', value: 'github-copilot' },
-                { label: 'Codex CLI', description: 'OpenAI\'s terminal coding agent (GPT-5-Codex)', value: 'codex' },
+                { label: 'Codex CLI', description: 'OpenAI\'s terminal coding agent', value: 'codex' },
                 { label: 'OpenHands', description: 'Open source AI coding agent', value: 'openhands' },
                 { label: 'Custom', description: 'Custom command (configure in settings)', value: 'custom' }
             ];

@@ -59,7 +59,7 @@ Auto-launches [Gemini CLI](https://cloud.google.com/gemini). Google's free AI co
 Auto-launches GitHub Copilot in the terminal. Requires `gh` CLI and Copilot subscription.
 
 ### **Codex CLI**
-Auto-launches [Codex CLI](https://github.com/openai/codex). OpenAI's terminal coding agent powered by GPT-5-Codex. Open source, runs locally.
+Auto-launches [Codex CLI](https://github.com/openai/codex). OpenAI's terminal coding agent. Open source, runs locally.
 
 ### **OpenHands**
 Auto-launches [OpenHands](https://github.com/All-Hands-AI/OpenHands). Open source AI coding agent.
