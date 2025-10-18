@@ -218,12 +218,12 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('terminalgrid.selectPreset', async () => {
             const items = [
                 { label: 'None', description: 'Plain terminal, no auto-launch', value: 'none' },
-                { label: 'GitHub Copilot CLI', description: '20M+ users, 90% of Fortune 100', value: 'github-copilot' },
-                { label: 'Claude Code', description: 'AI pair programming (Anthropic)', value: 'claude-code' },
-                { label: 'Codex CLI', description: 'OpenAI\'s terminal coding agent', value: 'codex' },
-                { label: 'Aider', description: 'AI pair programming with Git integration', value: 'aider' },
-                { label: 'Gemini CLI', description: 'Google\'s free AI assistant (60 req/min)', value: 'gemini-cli' },
-                { label: 'OpenHands', description: 'Open source AI coding agent', value: 'openhands' },
+                { label: 'Aider', description: 'Open source, Git integration', value: 'aider' },
+                { label: 'Claude Code', description: 'Anthropic', value: 'claude-code' },
+                { label: 'Codex CLI', description: 'OpenAI', value: 'codex' },
+                { label: 'Gemini CLI', description: 'Google (free, 60 req/min)', value: 'gemini-cli' },
+                { label: 'GitHub Copilot CLI', description: 'GitHub/Microsoft', value: 'github-copilot' },
+                { label: 'OpenHands', description: 'Open source', value: 'openhands' },
                 { label: 'Custom', description: 'Custom command (configure in settings)', value: 'custom' }
             ];
 
