@@ -81,6 +81,7 @@
             "aider",
             "gemini-cli",
             "github-copilot",
+            "codex",
             "openhands",
             "custom"
           ],
@@ -90,6 +91,7 @@
             "Auto-launch Aider (AI pair programming with Git)",
             "Auto-launch Gemini CLI (Google's free AI assistant)",
             "Auto-launch GitHub Copilot CLI",
+            "Auto-launch Codex CLI (OpenAI's GPT-5-Codex)",
             "Auto-launch OpenHands (open source)",
             "Custom command (configure below)"
           ],
