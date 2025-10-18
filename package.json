@@ -1,0 +1,141 @@
+{
+  "name": "terminalgrid",
+  "displayName": "TerminalGrid",
+  "description": "Terminal grid management with keyboard shortcuts and optional auto-launch for CLI tools (Claude Code, Aider, Codex, etc)",
+  "version": "0.1.0",
+  "publisher": "maxghenis",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "terminal",
+    "grid",
+    "claude",
+    "claude-code",
+    "aider",
+    "ai",
+    "split"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "terminalgrid.setup",
+        "title": "TerminalGrid: Setup"
+      },
+      {
+        "command": "terminalgrid.selectPreset",
+        "title": "TerminalGrid: Select Tool Preset"
+      },
+      {
+        "command": "terminalgrid.splitDownAndOpenTerminal",
+        "title": "Split Down and Open Terminal"
+      },
+      {
+        "command": "terminalgrid.splitRightAndOpenTerminal",
+        "title": "Split Right and Open Terminal"
+      },
+      {
+        "command": "terminalgrid.openTerminal",
+        "title": "Open New Terminal"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "terminalgrid.splitDownAndOpenTerminal",
+        "key": "cmd+k cmd+down",
+        "mac": "cmd+k cmd+down",
+        "win": "ctrl+k ctrl+down",
+        "linux": "ctrl+k ctrl+down"
+      },
+      {
+        "command": "terminalgrid.splitRightAndOpenTerminal",
+        "key": "cmd+k cmd+right",
+        "mac": "cmd+k cmd+right",
+        "win": "ctrl+k ctrl+right",
+        "linux": "ctrl+k ctrl+right"
+      },
+      {
+        "command": "terminalgrid.openTerminal",
+        "key": "cmd+k cmd+n",
+        "mac": "cmd+k cmd+n",
+        "win": "ctrl+k ctrl+n",
+        "linux": "ctrl+k ctrl+n"
+      }
+    ],
+    "configuration": {
+      "title": "TerminalGrid",
+      "properties": {
+        "terminalgrid.preset": {
+          "type": "string",
+          "enum": [
+            "none",
+            "claude-code",
+            "aider",
+            "custom"
+          ],
+          "enumDescriptions": [
+            "Plain terminal, no auto-launch",
+            "Auto-launch Claude Code",
+            "Auto-launch Aider",
+            "Custom command (configure below)"
+          ],
+          "default": "none",
+          "description": "Tool to auto-launch in new terminals"
+        },
+        "terminalgrid.customCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Custom command to run on terminal launch (when preset is 'custom')"
+        },
+        "terminalgrid.customCommandArgs": {
+          "type": "string",
+          "default": "",
+          "description": "Arguments for custom command (e.g., '--dangerously-skip-permissions' for Claude Code)"
+        },
+        "terminalgrid.autoConfigureOnInstall": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically configure terminal settings on extension install"
+        },
+        "terminalgrid.enableTerminalsInEditor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open terminals in editor area (enables full grid control)"
+        },
+        "terminalgrid.enablePersistentSessions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Restore terminal sessions across VS Code restarts"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MaxGhenis/terminalgrid"
+  },
+  "license": "MIT"
+}
