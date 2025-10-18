@@ -41,25 +41,25 @@ This works whether you're using AI agents purely for coding, or (like me) also f
 
 ## Presets
 
-TerminalGrid comes with built-in presets for popular AI coding tools:
+TerminalGrid comes with built-in presets for popular AI coding tools (ordered by popularity):
 
 ### **None** (Default)
 Plain terminals with grid management only. Perfect if you just want better keyboard shortcuts.
 
+### **GitHub Copilot CLI**
+Auto-launches GitHub Copilot in the terminal. 20M+ users, used by 90% of Fortune 100. Requires `gh` CLI and Copilot subscription.
+
 ### **Claude Code**
 Auto-launches [Claude Code](https://docs.claude.com/en/docs/claude-code) with `--dangerously-skip-permissions`. Anthropic's AI pair programmer with agentic capabilities.
+
+### **Codex CLI**
+Auto-launches [Codex CLI](https://github.com/openai/codex). OpenAI's terminal coding agent. Open source, runs locally.
 
 ### **Aider**
 Auto-launches [Aider](https://aider.chat). AI pair programming with Git integration and multi-file editing.
 
 ### **Gemini CLI**
 Auto-launches [Gemini CLI](https://cloud.google.com/gemini). Google's free AI coding assistant (60 requests/min with free account).
-
-### **GitHub Copilot CLI**
-Auto-launches GitHub Copilot in the terminal. Requires `gh` CLI and Copilot subscription.
-
-### **Codex CLI**
-Auto-launches [Codex CLI](https://github.com/openai/codex). OpenAI's terminal coding agent. Open source, runs locally.
 
 ### **OpenHands**
 Auto-launches [OpenHands](https://github.com/All-Hands-AI/OpenHands). Open source AI coding agent.

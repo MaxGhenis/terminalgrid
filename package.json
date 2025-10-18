@@ -77,21 +77,21 @@
           "type": "string",
           "enum": [
             "none",
+            "github-copilot",
             "claude-code",
+            "codex",
             "aider",
             "gemini-cli",
-            "github-copilot",
-            "codex",
             "openhands",
             "custom"
           ],
           "enumDescriptions": [
             "Plain terminal, no auto-launch",
+            "Auto-launch GitHub Copilot CLI (20M+ users)",
             "Auto-launch Claude Code (Anthropic)",
+            "Auto-launch Codex CLI (OpenAI)",
             "Auto-launch Aider (AI pair programming with Git)",
             "Auto-launch Gemini CLI (Google's free AI assistant)",
-            "Auto-launch GitHub Copilot CLI",
-            "Auto-launch Codex CLI (OpenAI)",
             "Auto-launch OpenHands (open source)",
             "Custom command (configure below)"
           ],
