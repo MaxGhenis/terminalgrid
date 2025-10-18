@@ -12,13 +12,15 @@ Transform VS Code into a powerful terminal workspace with keyboard-driven grid m
 
 ## Why TerminalGrid?
 
-If you're using AI coding tools like Claude Code for more than just coding—reviewing PRs, drafting documents, managing emails, running concurrent tasks—you need a better interface than multiple VS Code windows or native terminal grids.
+If you're doing a lot of AI-driven coding, you probably run multiple concurrent AI sessions—different agents working on different parts of your codebase, testing different approaches, or handling separate tasks simultaneously.
 
-TerminalGrid turns VS Code into an orchestration hub where you can:
-- Run 5-6 concurrent sessions in a clean grid layout
-- Paste images for AI analysis
-- Avoid crashes from multiple VS Code instances
-- Manage everything from one workspace
+TerminalGrid gives you the interface AI coding workflows need:
+- **Run 5-6 concurrent AI coding sessions** in a clean grid layout
+- **Paste screenshots** for visual debugging and UI feedback
+- **Avoid crashes** from multiple VS Code instances
+- **Manage everything from one workspace** instead of scattered terminals
+
+This works whether you're using AI agents purely for coding, or (like me) also for reviewing PRs, drafting docs, and other non-coding tasks.
 
 **But it's also great for regular development!** Use it just for the keyboard shortcuts and grid management, even without auto-launch.
 
@@ -39,16 +41,25 @@ TerminalGrid turns VS Code into an orchestration hub where you can:
 
 ## Presets
 
-TerminalGrid comes with built-in presets for popular tools:
+TerminalGrid comes with built-in presets for popular AI coding tools:
 
 ### **None** (Default)
 Plain terminals with grid management only. Perfect if you just want better keyboard shortcuts.
 
 ### **Claude Code**
-Auto-launches [Claude Code](https://docs.claude.com/en/docs/claude-code) with `--dangerously-skip-permissions` in every terminal. Great for running multiple concurrent AI sessions.
+Auto-launches [Claude Code](https://docs.claude.com/en/docs/claude-code) with `--dangerously-skip-permissions`. Anthropic's AI pair programmer with agentic capabilities.
 
 ### **Aider**
-Auto-launches [Aider](https://aider.chat) in every terminal.
+Auto-launches [Aider](https://aider.chat). AI pair programming with Git integration and multi-file editing.
+
+### **Gemini CLI**
+Auto-launches [Gemini CLI](https://cloud.google.com/gemini). Google's free AI coding assistant (60 requests/min with free account).
+
+### **GitHub Copilot CLI**
+Auto-launches GitHub Copilot in the terminal. Requires `gh` CLI and Copilot subscription.
+
+### **OpenHands**
+Auto-launches [OpenHands](https://github.com/All-Hands-AI/OpenHands). Open source AI coding agent.
 
 ### **Custom**
 Configure your own command:

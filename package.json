@@ -78,12 +78,18 @@
             "none",
             "claude-code",
             "aider",
+            "gemini-cli",
+            "github-copilot",
+            "openhands",
             "custom"
           ],
           "enumDescriptions": [
             "Plain terminal, no auto-launch",
-            "Auto-launch Claude Code",
-            "Auto-launch Aider",
+            "Auto-launch Claude Code (Anthropic)",
+            "Auto-launch Aider (AI pair programming with Git)",
+            "Auto-launch Gemini CLI (Google's free AI assistant)",
+            "Auto-launch GitHub Copilot CLI",
+            "Auto-launch OpenHands (open source)",
             "Custom command (configure below)"
           ],
           "default": "none",

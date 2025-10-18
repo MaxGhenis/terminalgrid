@@ -32,6 +32,37 @@ const PRESETS: Record<string, ToolPreset> = {
             '/usr/local/bin/aider',
             '/opt/homebrew/bin/aider'
         ]
+    },
+    'gemini-cli': {
+        name: 'Gemini CLI',
+        command: 'gemini',
+        args: '',
+        commonPaths: [
+            `${os.homedir()}/.local/bin/gemini`,
+            '/usr/local/bin/gemini',
+            '/opt/homebrew/bin/gemini',
+            `${os.homedir()}/.npm-global/bin/gemini`
+        ]
+    },
+    'github-copilot': {
+        name: 'GitHub Copilot CLI',
+        command: 'gh',
+        args: 'copilot',
+        commonPaths: [
+            '/usr/local/bin/gh',
+            '/opt/homebrew/bin/gh',
+            `${os.homedir()}/.local/bin/gh`
+        ]
+    },
+    'openhands': {
+        name: 'OpenHands',
+        command: 'openhands',
+        args: '',
+        commonPaths: [
+            `${os.homedir()}/.local/bin/openhands`,
+            '/usr/local/bin/openhands',
+            '/opt/homebrew/bin/openhands'
+        ]
     }
 };
 
@@ -176,8 +207,11 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('terminalgrid.selectPreset', async () => {
             const items = [
                 { label: 'None', description: 'Plain terminal, no auto-launch', value: 'none' },
-                { label: 'Claude Code', description: 'Auto-launch Claude Code', value: 'claude-code' },
-                { label: 'Aider', description: 'Auto-launch Aider', value: 'aider' },
+                { label: 'Claude Code', description: 'AI pair programming (Anthropic)', value: 'claude-code' },
+                { label: 'Aider', description: 'AI pair programming with Git integration', value: 'aider' },
+                { label: 'Gemini CLI', description: 'Google\'s free AI coding assistant (60 req/min)', value: 'gemini-cli' },
+                { label: 'GitHub Copilot CLI', description: 'GitHub\'s terminal AI assistant', value: 'github-copilot' },
+                { label: 'OpenHands', description: 'Open source AI coding agent', value: 'openhands' },
                 { label: 'Custom', description: 'Custom command (configure in settings)', value: 'custom' }
             ];
 
