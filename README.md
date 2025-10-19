@@ -12,17 +12,11 @@ Transform VS Code into a powerful terminal workspace with keyboard-driven grid m
 
 ## Why TerminalGrid?
 
-If you're doing a lot of AI-driven coding, you probably run multiple concurrent AI sessions—different agents working on different parts of your codebase, testing different approaches, or handling separate tasks simultaneously.
+**For AI-driven coding:**
+Run multiple concurrent AI coding sessions in a clean grid layout. Paste screenshots for visual debugging. Manage everything from one workspace instead of scattered terminal windows.
 
-TerminalGrid gives you the interface AI coding workflows need:
-- **Run 5-6 concurrent AI coding sessions** in a clean grid layout
-- **Paste screenshots** for visual debugging and UI feedback
-- **Avoid crashes** from multiple VS Code instances
-- **Manage everything from one workspace** instead of scattered terminals
-
-This works whether you're using AI agents purely for coding, or (like me) also for reviewing PRs, drafting docs, and other non-coding tasks.
-
-**But it's also great for regular development!** Use it just for the keyboard shortcuts and grid management, even without auto-launch.
+**For regular development:**
+Keyboard-driven terminal management is useful even without auto-launch. Quickly create complex grid layouts for dev servers, test runners, log monitoring, and interactive shells.
 
 ## Keyboard Shortcuts
 
