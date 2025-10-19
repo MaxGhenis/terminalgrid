@@ -49,8 +49,6 @@ Plain terminals with grid management only. Perfect if you just want better keybo
 ### **Claude Code**
 Auto-launches [Claude Code](https://docs.claude.com/en/docs/claude-code). Anthropic's AI pair programmer with agentic capabilities.
 
-**Note:** By default, Claude Code runs with permission prompts. Enable `terminalgrid.claudeCode.skipPermissions` in settings to use `--dangerously-skip-permissions` (only in trusted workspaces).
-
 ### **Codex CLI**
 Auto-launches [Codex CLI](https://github.com/openai/codex). OpenAI's terminal coding agent. Open source, runs locally.
 
@@ -93,8 +91,19 @@ Path to custom command (when preset is `custom`)
 ### **`terminalgrid.customCommandArgs`**
 Arguments for custom command
 
-### **`terminalgrid.claudeCode.skipPermissions`**
-Launch Claude Code with `--dangerously-skip-permissions` flag (default: `false`). Only enable in trusted workspaces.
+### **`terminalgrid.presetArgs`**
+Optional arguments for any preset. Allows customization of command-line flags for each tool.
+
+**Example:**
+```json
+{
+  "terminalgrid.presetArgs": {
+    "claude-code": "--dangerously-skip-permissions",
+    "aider": "--auto-commits --no-git",
+    "codex": "--model gpt-4"
+  }
+}
+```
 
 ### **`terminalgrid.enableTerminalsInEditor`**
 Open terminals in editor area for full grid control (default: `true`)

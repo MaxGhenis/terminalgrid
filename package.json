@@ -108,10 +108,13 @@
           "default": "",
           "description": "Arguments for custom command (e.g., '--dangerously-skip-permissions' for Claude Code)"
         },
-        "terminalgrid.claudeCode.skipPermissions": {
-          "type": "boolean",
-          "default": false,
-          "description": "Launch Claude Code with --dangerously-skip-permissions flag (only use in trusted workspaces)"
+        "terminalgrid.presetArgs": {
+          "type": "object",
+          "default": {},
+          "description": "Optional arguments for each preset. Example: {\"claude-code\": \"--dangerously-skip-permissions\", \"aider\": \"--auto-commits\"}",
+          "additionalProperties": {
+            "type": "string"
+          }
         },
         "terminalgrid.autoConfigureOnInstall": {
           "type": "boolean",
