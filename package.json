@@ -2,7 +2,7 @@
   "name": "terminalgrid",
   "displayName": "TerminalGrid",
   "description": "Terminal grid management with keyboard shortcuts and optional auto-launch for CLI tools (Claude Code, Aider, Codex, etc)",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "maxghenis",
   "icon": "icon.png",
   "engines": {
