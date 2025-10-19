@@ -16,7 +16,7 @@ const PRESETS: Record<string, ToolPreset> = {
     'claude-code': {
         name: 'Claude Code',
         command: 'claude',
-        args: '--dangerously-skip-permissions',
+        args: '', // Args set dynamically based on settings
         commonPaths: [
             `${os.homedir()}/.claude/local/node_modules/.bin/claude`,
             '/usr/local/bin/claude',
@@ -163,6 +163,13 @@ async function configureTerminalSettings() {
 
         command = detectedPath;
         args = presetConfig.args || '';
+
+        // Special handling for Claude Code to check skip permissions setting
+        if (preset === 'claude-code') {
+            const skipPermissions = config.get<boolean>('claudeCode.skipPermissions', false);
+            args = skipPermissions ? '--dangerously-skip-permissions' : '';
+        }
+
         profileName = `TerminalGrid (${presetConfig.name})`;
     }
 
@@ -218,7 +225,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('terminalgrid.selectPreset', async () => {
             const items = [
                 { label: 'None', description: 'Plain terminal, no auto-launch', value: 'none' },
-                { label: 'Claude Code', description: 'Anthropic', value: 'claude-code' },
+                { label: 'Claude Code', description: 'Anthropic (see settings for --dangerously-skip-permissions)', value: 'claude-code' },
                 { label: 'Codex CLI', description: 'OpenAI', value: 'codex' },
                 { label: 'Gemini CLI', description: 'Google (free, 60 req/min)', value: 'gemini-cli' },
                 { label: 'GitHub Copilot CLI', description: 'GitHub/Microsoft', value: 'github-copilot' },
