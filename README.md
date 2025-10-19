@@ -35,9 +35,15 @@ This works whether you're using AI agents purely for coding, or (like me) also f
 
 ## Installation
 
-1. Install from VS Code Marketplace: Search for "TerminalGrid"
-2. Configure your auto-launch command (or leave empty for plain terminals)
-3. Start creating your grid!
+**Pre-release (current):**
+
+1. Download the latest `.vsix` from [GitHub Releases](https://github.com/MaxGhenis/terminalgrid/releases/latest)
+2. In VS Code: Extensions → `...` menu → "Install from VSIX..."
+3. Select the downloaded file
+4. Configure your auto-launch command (or leave empty for plain terminals)
+5. Start creating your grid!
+
+**VS Code Marketplace:** *Coming soon*
 
 ## Configuration
 
