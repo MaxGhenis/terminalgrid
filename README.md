@@ -46,9 +46,6 @@ TerminalGrid comes with built-in presets for popular AI coding tools:
 ### **None** (Default)
 Plain terminals with grid management only. Perfect if you just want better keyboard shortcuts.
 
-### **Aider**
-Auto-launches [Aider](https://aider.chat). Open source AI pair programming with Git integration and multi-file editing.
-
 ### **Claude Code**
 Auto-launches [Claude Code](https://docs.claude.com/en/docs/claude-code) with `--dangerously-skip-permissions`. Anthropic's AI pair programmer with agentic capabilities.
 
@@ -60,6 +57,9 @@ Auto-launches [Gemini CLI](https://cloud.google.com/gemini). Google's free AI co
 
 ### **GitHub Copilot CLI**
 Auto-launches GitHub Copilot in the terminal (GitHub/Microsoft). Requires `gh` CLI and Copilot subscription.
+
+### **Aider**
+Auto-launches [Aider](https://aider.chat). Open source AI pair programming with Git integration and multi-file editing.
 
 ### **OpenHands**
 Auto-launches [OpenHands](https://github.com/All-Hands-AI/OpenHands). Open source AI coding agent.
