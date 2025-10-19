@@ -31,10 +31,6 @@
         "title": "TerminalGrid: Setup"
       },
       {
-        "command": "terminalgrid.selectPreset",
-        "title": "TerminalGrid: Select Tool Preset"
-      },
-      {
         "command": "terminalgrid.splitDownAndOpenTerminal",
         "title": "Split Down and Open Terminal"
       },
@@ -73,48 +69,10 @@
     "configuration": {
       "title": "TerminalGrid",
       "properties": {
-        "terminalgrid.preset": {
-          "type": "string",
-          "enum": [
-            "none",
-            "claude-code",
-            "codex",
-            "gemini-cli",
-            "github-copilot",
-            "aider",
-            "openhands",
-            "custom"
-          ],
-          "enumDescriptions": [
-            "Plain terminal, no auto-launch",
-            "Auto-launch Claude Code (Anthropic)",
-            "Auto-launch Codex CLI (OpenAI)",
-            "Auto-launch Gemini CLI (Google, free)",
-            "Auto-launch GitHub Copilot CLI (GitHub/Microsoft)",
-            "Auto-launch Aider (open source, Git integration)",
-            "Auto-launch OpenHands (open source)",
-            "Custom command (configure below)"
-          ],
-          "default": "none",
-          "description": "Tool to auto-launch in new terminals"
-        },
-        "terminalgrid.customCommand": {
+        "terminalgrid.autoLaunchCommand": {
           "type": "string",
           "default": "",
-          "description": "Custom command to run on terminal launch (when preset is 'custom')"
-        },
-        "terminalgrid.customCommandArgs": {
-          "type": "string",
-          "default": "",
-          "description": "Arguments for custom command (e.g., '--dangerously-skip-permissions' for Claude Code)"
-        },
-        "terminalgrid.presetArgs": {
-          "type": "object",
-          "default": {},
-          "description": "Optional arguments for each preset. Example: {\"claude-code\": \"--dangerously-skip-permissions\", \"aider\": \"--auto-commits\"}",
-          "additionalProperties": {
-            "type": "string"
-          }
+          "markdownDescription": "Command to run on terminal launch. Leave empty for plain terminal.\n\n**Examples:**\n- `claude --dangerously-skip-permissions`\n- `aider --auto-commits`\n- `codex`\n- `gh copilot`\n- `gemini`"
         },
         "terminalgrid.autoConfigureOnInstall": {
           "type": "boolean",

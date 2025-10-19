@@ -1,100 +1,5 @@
 import * as vscode from 'vscode';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import * as os from 'os';
-
-const execAsync = promisify(exec);
-
-interface ToolPreset {
-    name: string;
-    command: string;
-    args?: string;
-    commonPaths: string[];
-}
-
-const PRESETS: Record<string, ToolPreset> = {
-    'claude-code': {
-        name: 'Claude Code',
-        command: 'claude',
-        args: '', // Args set dynamically based on settings
-        commonPaths: [
-            `${os.homedir()}/.claude/local/node_modules/.bin/claude`,
-            '/usr/local/bin/claude',
-            '/opt/homebrew/bin/claude'
-        ]
-    },
-    'aider': {
-        name: 'Aider',
-        command: 'aider',
-        args: '',
-        commonPaths: [
-            `${os.homedir()}/.local/bin/aider`,
-            '/usr/local/bin/aider',
-            '/opt/homebrew/bin/aider'
-        ]
-    },
-    'gemini-cli': {
-        name: 'Gemini CLI',
-        command: 'gemini',
-        args: '',
-        commonPaths: [
-            `${os.homedir()}/.local/bin/gemini`,
-            '/usr/local/bin/gemini',
-            '/opt/homebrew/bin/gemini',
-            `${os.homedir()}/.npm-global/bin/gemini`
-        ]
-    },
-    'github-copilot': {
-        name: 'GitHub Copilot CLI',
-        command: 'gh',
-        args: 'copilot',
-        commonPaths: [
-            '/usr/local/bin/gh',
-            '/opt/homebrew/bin/gh',
-            `${os.homedir()}/.local/bin/gh`
-        ]
-    },
-    'codex': {
-        name: 'Codex CLI',
-        command: 'codex',
-        args: '',
-        commonPaths: [
-            `${os.homedir()}/.local/bin/codex`,
-            '/usr/local/bin/codex',
-            '/opt/homebrew/bin/codex',
-            `${os.homedir()}/.cargo/bin/codex`
-        ]
-    },
-    'openhands': {
-        name: 'OpenHands',
-        command: 'openhands',
-        args: '',
-        commonPaths: [
-            `${os.homedir()}/.local/bin/openhands`,
-            '/usr/local/bin/openhands',
-            '/opt/homebrew/bin/openhands'
-        ]
-    }
-};
-
-async function findCommandPath(commandName: string, commonPaths: string[]): Promise<string | undefined> {
-    // Try `which` first
-    try {
-        const { stdout } = await execAsync(`which ${commandName}`);
-        return stdout.trim();
-    } catch (error) {
-        // Try common paths
-        for (const path of commonPaths) {
-            try {
-                await execAsync(`test -f ${path}`);
-                return path;
-            } catch {
-                continue;
-            }
-        }
-    }
-    return undefined;
-}
 
 async function configureTerminalSettings() {
     const config = vscode.workspace.getConfiguration('terminalgrid');
@@ -113,8 +18,8 @@ async function configureTerminalSettings() {
         await globalConfig.update('terminal.integrated.hideOnStartup', 'never', vscode.ConfigurationTarget.Global);
     }
 
-    // Configure terminal profile based on preset
-    const preset = config.get<string>('preset', 'none');
+    // Configure terminal profile based on autoLaunchCommand
+    const autoLaunchCommand = config.get<string>('autoLaunchCommand', '').trim();
 
     const platform = os.platform();
     const profileKey = platform === 'darwin' ? 'terminal.integrated.profiles.osx' :
@@ -130,62 +35,24 @@ async function configureTerminalSettings() {
 
     const profiles = globalConfig.get(profileKey) || {};
 
-    if (preset === 'none') {
+    if (!autoLaunchCommand) {
         // Just use default shell
         await globalConfig.update(defaultProfileKey, shell, vscode.ConfigurationTarget.Global);
         vscode.window.showInformationMessage('TerminalGrid configured with default shell');
         return;
     }
 
-    let command: string = '';
-    let args: string = '';
-    let profileName: string = 'TerminalGrid';
-
-    if (preset === 'custom') {
-        command = config.get<string>('customCommand', '');
-        args = config.get<string>('customCommandArgs', '');
-
-        if (!command) {
-            vscode.window.showErrorMessage('Custom command not configured. Please set terminalgrid.customCommand');
-            return;
-        }
-        profileName = 'TerminalGrid (Custom)';
-    } else if (PRESETS[preset]) {
-        const presetConfig = PRESETS[preset];
-        const detectedPath = await findCommandPath(presetConfig.command, presetConfig.commonPaths);
-
-        if (!detectedPath) {
-            vscode.window.showErrorMessage(
-                `${presetConfig.name} not found. Please install it or use custom preset.`
-            );
-            return;
-        }
-
-        command = detectedPath;
-        args = presetConfig.args || '';
-
-        // Check for user-specified args for this preset
-        const presetArgs = config.get<Record<string, string>>('presetArgs', {});
-        if (presetArgs[preset]) {
-            args = presetArgs[preset];
-        }
-
-        profileName = `TerminalGrid (${presetConfig.name})`;
-    }
-
     // Build shell args to launch the command
     let shellArgs: string[];
-    const fullCommand = args ? `${command} ${args}` : command;
-
     if (platform === 'win32') {
-        shellArgs = ['-NoExit', '-Command', `& '${fullCommand}'`];
+        shellArgs = ['-NoExit', '-Command', `& '${autoLaunchCommand}'`];
     } else {
-        shellArgs = ['-l', '-c', `source ~/.${shell}rc 2>/dev/null; ${fullCommand}; exec ${shell}`];
+        shellArgs = ['-l', '-c', `source ~/.${shell}rc 2>/dev/null; ${autoLaunchCommand}; exec ${shell}`];
     }
 
     const updatedProfiles = {
         ...profiles,
-        [profileName]: {
+        'TerminalGrid': {
             path: shell,
             args: shellArgs
         },
@@ -195,9 +62,9 @@ async function configureTerminalSettings() {
     };
 
     await globalConfig.update(profileKey, updatedProfiles, vscode.ConfigurationTarget.Global);
-    await globalConfig.update(defaultProfileKey, profileName, vscode.ConfigurationTarget.Global);
+    await globalConfig.update(defaultProfileKey, 'TerminalGrid', vscode.ConfigurationTarget.Global);
 
-    vscode.window.showInformationMessage(`TerminalGrid configured with ${profileName}!`);
+    vscode.window.showInformationMessage('TerminalGrid configured!');
 }
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -217,32 +84,6 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('terminalgrid.setup', async () => {
             await configureTerminalSettings();
             await context.globalState.update('hasConfigured', true);
-        })
-    );
-
-    // Register preset selection command
-    context.subscriptions.push(
-        vscode.commands.registerCommand('terminalgrid.selectPreset', async () => {
-            const items = [
-                { label: 'None', description: 'Plain terminal, no auto-launch', value: 'none' },
-                { label: 'Claude Code', description: 'Anthropic', value: 'claude-code' },
-                { label: 'Codex CLI', description: 'OpenAI', value: 'codex' },
-                { label: 'Gemini CLI', description: 'Google (free, 60 req/min)', value: 'gemini-cli' },
-                { label: 'GitHub Copilot CLI', description: 'GitHub/Microsoft', value: 'github-copilot' },
-                { label: 'Aider', description: 'Open source, Git integration', value: 'aider' },
-                { label: 'OpenHands', description: 'Open source', value: 'openhands' },
-                { label: 'Custom', description: 'Custom command (configure in settings)', value: 'custom' }
-            ];
-
-            const selected = await vscode.window.showQuickPick(items, {
-                placeHolder: 'Select tool to auto-launch in terminals'
-            });
-
-            if (selected) {
-                const config = vscode.workspace.getConfiguration('terminalgrid');
-                await config.update('preset', selected.value, vscode.ConfigurationTarget.Global);
-                await configureTerminalSettings();
-            }
         })
     );
 
@@ -272,9 +113,8 @@ export async function activate(context: vscode.ExtensionContext) {
     // Watch for config changes
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration(async (e) => {
-            if (e.affectsConfiguration('terminalgrid')) {
-                // Optionally reconfigure when settings change
-                // await configureTerminalSettings();
+            if (e.affectsConfiguration('terminalgrid.autoLaunchCommand')) {
+                await configureTerminalSettings();
             }
         })
     );
