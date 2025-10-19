@@ -16,8 +16,10 @@ VS Code's integrated terminal only supports horizontal splitting (side-by-side).
 
 **TerminalGrid solves this** by moving terminals to the editor area, where you get full horizontal and vertical split control.
 
+Additionally, **image pasting in native terminals is unreliable** for Claude Code and other AI tools (see issues [#1361](https://github.com/anthropics/claude-code/issues/1361), [#5392](https://github.com/anthropics/claude-code/issues/5392), [#834](https://github.com/anthropics/claude-code/issues/834)). VS Code's terminal integration provides much better support for pasting screenshots and dragging files.
+
 **For AI-driven coding:**
-Run multiple concurrent AI coding sessions in a clean grid layout. Paste screenshots for visual debugging. Manage everything from one workspace instead of scattered terminal windows.
+Run multiple concurrent AI coding sessions in a clean grid layout. Paste screenshots reliably for visual debugging. Manage everything from one workspace instead of scattered terminal windows.
 
 **For regular development:**
 Keyboard-driven terminal management is useful even without auto-launch. Quickly create complex grid layouts for dev servers, test runners, log monitoring, and interactive shells.
