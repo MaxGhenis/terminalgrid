@@ -12,6 +12,10 @@ Transform VS Code into a powerful terminal workspace with keyboard-driven grid m
 
 ## Why TerminalGrid?
 
+VS Code's integrated terminal only supports horizontal splitting (side-by-side). There's no native way to stack terminals vertically or create complex grids. This has been requested for years in VS Code issues [#56112](https://github.com/microsoft/vscode/issues/56112), [#160501](https://github.com/microsoft/vscode/issues/160501), and [#162710](https://github.com/microsoft/vscode/issues/162710), but hasn't been implemented.
+
+**TerminalGrid solves this** by moving terminals to the editor area, where you get full horizontal and vertical split control.
+
 **For AI-driven coding:**
 Run multiple concurrent AI coding sessions in a clean grid layout. Paste screenshots for visual debugging. Manage everything from one workspace instead of scattered terminal windows.
 
