@@ -176,16 +176,30 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         return false;
     }
 
+    const autoLaunchCommand = config.get<string>('autoLaunchCommand', '').trim();
+
     // Check if there are already terminals open (VS Code restored them)
     if (vscode.window.terminals.length > 0) {
-        console.log('TerminalGrid: Terminals already exist, skipping restore');
+        console.log('TerminalGrid: Terminals already exist from VS Code restore');
+
+        // But if this was a crash, send auto-launch command to existing terminals
+        if (autoLaunchCommand) {
+            console.log(`TerminalGrid: Sending auto-launch command to ${vscode.window.terminals.length} existing terminals`);
+            for (const terminal of vscode.window.terminals) {
+                setTimeout(() => {
+                    terminal.sendText(autoLaunchCommand);
+                }, 1000); // Longer delay for VS Code-restored terminals
+            }
+            vscode.window.showInformationMessage(
+                `TerminalGrid: Launched ${autoLaunchCommand.split(' ')[0]} in ${vscode.window.terminals.length} restored terminal(s)`
+            );
+        }
+
         await context.globalState.update(TERMINAL_STATE_KEY, undefined);
-        return false;
+        return true;
     }
 
     console.log(`TerminalGrid: Restoring ${state.terminals.length} terminals from crash`);
-
-    const autoLaunchCommand = config.get<string>('autoLaunchCommand', '').trim();
 
     for (const savedTerminal of state.terminals) {
         const terminalOptions: vscode.TerminalOptions = {
