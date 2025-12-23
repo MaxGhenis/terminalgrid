@@ -23,6 +23,12 @@ function getTerminalKey(terminal: vscode.Terminal): string {
     return `${terminal.name}-${terminal.creationOptions?.name || 'default'}`;
 }
 
+function getFolderName(cwd: string): string {
+    // Get the last folder name from a path
+    const parts = cwd.split('/').filter(p => p.length > 0);
+    return parts[parts.length - 1] || 'Terminal';
+}
+
 async function configureTerminalSettings() {
     const config = vscode.workspace.getConfiguration('terminalgrid');
     const globalConfig = vscode.workspace.getConfiguration();
@@ -201,10 +207,16 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
 
     console.log(`TerminalGrid: Restoring ${state.terminals.length} terminals from crash`);
 
+    const autoNameByFolder = config.get('autoNameByFolder', true);
+
     for (const savedTerminal of state.terminals) {
+        // Use saved name, or auto-generate from folder if enabled
+        const terminalName = savedTerminal.name ||
+            (autoNameByFolder ? getFolderName(savedTerminal.cwd) : undefined);
+
         const terminalOptions: vscode.TerminalOptions = {
             cwd: savedTerminal.cwd,
-            name: savedTerminal.name || `Terminal (${savedTerminal.cwd.split('/').pop()})`
+            name: terminalName
         };
 
         const terminal = vscode.window.createTerminal(terminalOptions);
@@ -322,11 +334,30 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // Helper to create a new terminal with auto-naming
+    const createNamedTerminal = () => {
+        const config = vscode.workspace.getConfiguration('terminalgrid');
+        const autoNameByFolder = config.get('autoNameByFolder', true);
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+
+        const options: vscode.TerminalOptions = {};
+
+        if (autoNameByFolder && workspaceFolders && workspaceFolders.length > 0) {
+            const cwd = workspaceFolders[0].uri.fsPath;
+            options.name = getFolderName(cwd);
+            options.cwd = cwd;
+        }
+
+        const terminal = vscode.window.createTerminal(options);
+        terminal.show();
+        return terminal;
+    };
+
     // Register split down and open terminal command
     context.subscriptions.push(
         vscode.commands.registerCommand('terminalgrid.splitDownAndOpenTerminal', async () => {
             await vscode.commands.executeCommand('workbench.action.splitEditorDown');
-            await vscode.commands.executeCommand('workbench.action.terminal.new');
+            createNamedTerminal();
         })
     );
 
@@ -334,14 +365,14 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('terminalgrid.splitRightAndOpenTerminal', async () => {
             await vscode.commands.executeCommand('workbench.action.splitEditorRight');
-            await vscode.commands.executeCommand('workbench.action.terminal.new');
+            createNamedTerminal();
         })
     );
 
     // Register open terminal command
     context.subscriptions.push(
         vscode.commands.registerCommand('terminalgrid.openTerminal', async () => {
-            await vscode.commands.executeCommand('workbench.action.terminal.new');
+            createNamedTerminal();
         })
     );
 

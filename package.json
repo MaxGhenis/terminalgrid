@@ -93,6 +93,11 @@
           "type": "boolean",
           "default": true,
           "description": "Restore terminal working directories after VS Code crashes"
+        },
+        "terminalgrid.autoNameByFolder": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically name terminals based on their working directory folder name"
         }
       }
     }
