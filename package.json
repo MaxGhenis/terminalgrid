@@ -2,11 +2,11 @@
   "name": "terminalgrid",
   "displayName": "TerminalGrid",
   "description": "Terminal grid management with keyboard shortcuts and optional auto-launch for CLI tools (Claude Code, Aider, Codex, etc)",
-  "version": "0.2.1",
-  "publisher": "maxghenis",
+  "version": "0.3.0",
+  "publisher": "MaxGhenis",
   "icon": "icon.png",
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.93.0"
   },
   "categories": [
     "Other"
@@ -88,6 +88,11 @@
           "type": "boolean",
           "default": true,
           "description": "Restore terminal sessions across VS Code restarts"
+        },
+        "terminalgrid.enableDirectoryRestore": {
+          "type": "boolean",
+          "default": true,
+          "description": "Restore terminal working directories after VS Code crashes"
         }
       }
     }
@@ -101,7 +106,7 @@
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.80.0",
+    "@types/vscode": "^1.93.0",
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
