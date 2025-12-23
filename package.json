@@ -98,6 +98,11 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically name terminals based on their working directory folder name"
+        },
+        "terminalgrid.promptForFolder": {
+          "type": "boolean",
+          "default": true,
+          "description": "Prompt for folder selection before opening a new terminal"
         }
       }
     }
@@ -111,12 +116,13 @@
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/vscode": "^1.93.0",
     "@types/node": "^20.0.0",
+    "@types/vscode": "^1.93.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "eslint": "^8.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^4.0.16"
   },
   "repository": {
     "type": "git",

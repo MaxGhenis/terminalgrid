@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as os from 'os';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption } from './utils';
 
 interface SavedTerminal {
     cwd: string;
@@ -21,12 +22,6 @@ let terminalCwdMap: Map<string, string> = new Map();
 function getTerminalKey(terminal: vscode.Terminal): string {
     // Use terminal name + creation order as key since processId is async
     return `${terminal.name}-${terminal.creationOptions?.name || 'default'}`;
-}
-
-function getFolderName(cwd: string): string {
-    // Get the last folder name from a path
-    const parts = cwd.split('/').filter(p => p.length > 0);
-    return parts[parts.length - 1] || 'Terminal';
 }
 
 async function configureTerminalSettings() {
@@ -334,18 +329,62 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Helper to create a new terminal with auto-naming
-    const createNamedTerminal = () => {
+    // Helper to create a new terminal with folder selection
+    const createNamedTerminal = async (skipFolderPrompt: boolean = false) => {
         const config = vscode.workspace.getConfiguration('terminalgrid');
         const autoNameByFolder = config.get('autoNameByFolder', true);
-        const workspaceFolders = vscode.workspace.workspaceFolders;
+        const promptForFolder = config.get('promptForFolder', true);
 
         const options: vscode.TerminalOptions = {};
+        let selectedFolder: string | undefined;
 
-        if (autoNameByFolder && workspaceFolders && workspaceFolders.length > 0) {
-            const cwd = workspaceFolders[0].uri.fsPath;
-            options.name = getFolderName(cwd);
-            options.cwd = cwd;
+        if (promptForFolder && !skipFolderPrompt) {
+            const workspaceFolders = vscode.workspace.workspaceFolders || [];
+            const homeDir = os.homedir();
+
+            // Use extracted utility to create quick pick items
+            const items = createFolderQuickPickItems(workspaceFolders);
+
+            const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: 'Select folder for new terminal',
+                title: 'TerminalGrid: New Terminal'
+            });
+
+            if (!selected) {
+                return undefined; // User cancelled
+            }
+
+            if (isBrowseOption(selected)) {
+                // Open folder picker dialog
+                const folderUri = await vscode.window.showOpenDialog({
+                    canSelectFiles: false,
+                    canSelectFolders: true,
+                    canSelectMany: false,
+                    defaultUri: vscode.Uri.file(homeDir),
+                    title: 'Select folder for terminal'
+                });
+
+                if (!folderUri || folderUri.length === 0) {
+                    return undefined; // User cancelled
+                }
+
+                selectedFolder = folderUri[0].fsPath;
+            } else {
+                selectedFolder = selected.description;
+            }
+        } else {
+            // Use first workspace folder if available
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (workspaceFolders && workspaceFolders.length > 0) {
+                selectedFolder = workspaceFolders[0].uri.fsPath;
+            }
+        }
+
+        if (selectedFolder) {
+            options.cwd = selectedFolder;
+            if (autoNameByFolder) {
+                options.name = getFolderName(selectedFolder);
+            }
         }
 
         const terminal = vscode.window.createTerminal(options);
