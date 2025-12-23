@@ -224,31 +224,51 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
     }
 
     const autoLaunchCommand = config.get<string>('autoLaunchCommand', '').trim();
+    const autoNameByFolder = config.get('autoNameByFolder', true);
 
     // Check if there are already terminals open (VS Code restored them)
     if (vscode.window.terminals.length > 0) {
-        console.log('TerminalGrid: Terminals already exist from VS Code restore');
+        console.log('TerminalGrid: VS Code restored terminals, but we need to replace them with correct cwds/names');
 
-        // But if this was a crash, send auto-launch command to existing terminals
-        if (autoLaunchCommand) {
-            console.log(`TerminalGrid: Sending auto-launch command to ${vscode.window.terminals.length} existing terminals`);
-            for (const terminal of vscode.window.terminals) {
+        // Kill VS Code's restored terminals - they have wrong cwds and names
+        const existingTerminals = [...vscode.window.terminals];
+        for (const terminal of existingTerminals) {
+            terminal.dispose();
+        }
+
+        // Wait for terminals to close
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Now create our terminals with correct cwds and names
+        console.log(`TerminalGrid: Creating ${state.terminals.length} terminals with saved cwds/names`);
+
+        for (const savedTerminal of state.terminals) {
+            const terminalName = savedTerminal.name ||
+                (autoNameByFolder ? getFolderName(savedTerminal.cwd) : undefined);
+
+            const terminalOptions: vscode.TerminalOptions = {
+                cwd: savedTerminal.cwd,
+                name: terminalName
+            };
+
+            const terminal = vscode.window.createTerminal(terminalOptions);
+
+            if (autoLaunchCommand) {
                 setTimeout(() => {
                     terminal.sendText(autoLaunchCommand);
-                }, 1000); // Longer delay for VS Code-restored terminals
+                }, 500);
             }
-            vscode.window.showInformationMessage(
-                `TerminalGrid: Launched ${autoLaunchCommand.split(' ')[0]} in ${vscode.window.terminals.length} restored terminal(s)`
-            );
         }
+
+        vscode.window.showInformationMessage(
+            `TerminalGrid: Restored ${state.terminals.length} terminal(s) with saved directories`
+        );
 
         await context.globalState.update(TERMINAL_STATE_KEY, undefined);
         return true;
     }
 
     console.log(`TerminalGrid: Restoring ${state.terminals.length} terminals from crash`);
-
-    const autoNameByFolder = config.get('autoNameByFolder', true);
 
     for (const savedTerminal of state.terminals) {
         // Use saved name, or auto-generate from folder if enabled
