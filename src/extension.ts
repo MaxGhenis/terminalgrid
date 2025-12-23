@@ -25,9 +25,11 @@ let saveInterval: NodeJS.Timeout | undefined;
 let iconUpdateInterval: NodeJS.Timeout | undefined;
 let terminalCwdMap: Map<string, string> = new Map();
 
-// Icons for terminal status
-const CLAUDE_ICON = new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('terminal.ansiYellow'));
-const SHELL_ICON = new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('terminal.ansiGreen'));
+// Icons for terminal creation
+const TERMINAL_ICON = new vscode.ThemeIcon('terminal', new vscode.ThemeColor('terminal.ansiGreen'));
+
+// Status bar item for showing Claude status
+let statusBarItem: vscode.StatusBarItem | undefined;
 
 /**
  * Check if a terminal is running Claude Code
@@ -51,17 +53,33 @@ async function isTerminalRunningClaude(terminal: vscode.Terminal): Promise<boole
 }
 
 /**
- * Update terminal icons based on whether Claude is running
+ * Update status bar with Claude terminal count
  */
-async function updateTerminalIcons() {
+async function updateStatusBar() {
+    if (!statusBarItem) return;
+
+    let claudeCount = 0;
+    let shellCount = 0;
+
     for (const terminal of vscode.window.terminals) {
         try {
             const isRunningClaude = await isTerminalRunningClaude(terminal);
-            // VS Code API allows setting iconPath on terminals
-            (terminal as any).iconPath = isRunningClaude ? CLAUDE_ICON : SHELL_ICON;
+            if (isRunningClaude) {
+                claudeCount++;
+            } else {
+                shellCount++;
+            }
         } catch {
-            // Ignore errors for individual terminals
+            shellCount++;
         }
+    }
+
+    if (claudeCount > 0 || shellCount > 0) {
+        statusBarItem.text = `$(terminal) ${claudeCount > 0 ? `🟡${claudeCount}` : ''}${shellCount > 0 ? ` 🟢${shellCount}` : ''}`;
+        statusBarItem.tooltip = `Claude: ${claudeCount} | Shell: ${shellCount}`;
+        statusBarItem.show();
+    } else {
+        statusBarItem.hide();
     }
 }
 
@@ -248,9 +266,11 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
 
             const terminalOptions: vscode.TerminalOptions = {
                 cwd: savedTerminal.cwd,
-                name: terminalName
+                name: terminalName,
+                iconPath: TERMINAL_ICON
             };
 
+            console.log(`TerminalGrid: Creating terminal "${terminalName}" in ${savedTerminal.cwd}`);
             const terminal = vscode.window.createTerminal(terminalOptions);
 
             // Track the cwd immediately
@@ -280,9 +300,11 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
 
         const terminalOptions: vscode.TerminalOptions = {
             cwd: savedTerminal.cwd,
-            name: terminalName
+            name: terminalName,
+            iconPath: TERMINAL_ICON
         };
 
+        console.log(`TerminalGrid: Restoring terminal "${terminalName}" in ${savedTerminal.cwd}`);
         const terminal = vscode.window.createTerminal(terminalOptions);
 
         // Track the cwd immediately
@@ -371,10 +393,14 @@ export async function activate(context: vscode.ExtensionContext) {
     // Start periodic state saving
     startPeriodicSave(context);
 
-    // Start periodic icon updates
-    iconUpdateInterval = setInterval(updateTerminalIcons, ICON_UPDATE_INTERVAL_MS);
+    // Create status bar item for Claude/shell count
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    context.subscriptions.push(statusBarItem);
+
+    // Start periodic status bar updates
+    iconUpdateInterval = setInterval(updateStatusBar, ICON_UPDATE_INTERVAL_MS);
     // Initial update
-    updateTerminalIcons();
+    updateStatusBar();
 
     // Track terminal cwds via shell integration
     context.subscriptions.push(
@@ -464,6 +490,10 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         }
 
+        // Always set icon
+        options.iconPath = TERMINAL_ICON;
+
+        console.log(`TerminalGrid: Creating terminal "${options.name}" in ${options.cwd}`);
         const terminal = vscode.window.createTerminal(options);
         terminal.show();
 
