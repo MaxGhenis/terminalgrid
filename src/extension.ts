@@ -253,6 +253,9 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
 
             const terminal = vscode.window.createTerminal(terminalOptions);
 
+            // Track the cwd immediately
+            terminalCwdMap.set(getTerminalKey(terminal), savedTerminal.cwd);
+
             if (autoLaunchCommand) {
                 setTimeout(() => {
                     terminal.sendText(autoLaunchCommand);
@@ -281,6 +284,9 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         };
 
         const terminal = vscode.window.createTerminal(terminalOptions);
+
+        // Track the cwd immediately
+        terminalCwdMap.set(getTerminalKey(terminal), savedTerminal.cwd);
 
         // If there's an auto-launch command, run it after a short delay
         if (autoLaunchCommand) {
@@ -460,6 +466,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
         const terminal = vscode.window.createTerminal(options);
         terminal.show();
+
+        // Immediately track the cwd so it's saved even if shell integration doesn't report it
+        if (selectedFolder) {
+            terminalCwdMap.set(getTerminalKey(terminal), selectedFolder);
+            console.log(`TerminalGrid: Tracked new terminal cwd: ${selectedFolder}`);
+        }
+
         return terminal;
     };
 
