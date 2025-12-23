@@ -43,3 +43,39 @@ export function createFolderQuickPickItems(
 export function isBrowseOption(item: { label: string }): boolean {
     return item.label.includes('Browse...');
 }
+
+/**
+ * Check if a process name indicates Claude Code is running
+ * @param processName - The process command name
+ * @returns true if it's a Claude-related process
+ */
+export function isClaudeProcess(processName: string): boolean {
+    const name = processName.toLowerCase();
+    return name.includes('claude');
+}
+
+/**
+ * Parse ps command output into process list
+ * @param stdout - Output from ps command
+ * @returns Array of process info objects
+ */
+export function parseProcessList(stdout: string): { pid: number; comm: string }[] {
+    return stdout
+        .trim()
+        .split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+            const parts = line.trim().split(/\s+/);
+            return { pid: parseInt(parts[0], 10), comm: parts[1] || '' };
+        })
+        .filter(p => !isNaN(p.pid));
+}
+
+/**
+ * Check if any process in a list is Claude
+ * @param processes - Array of process info
+ * @returns true if any process is Claude-related
+ */
+export function hasClaudeInProcessList(processes: { comm: string }[]): boolean {
+    return processes.some(p => isClaudeProcess(p.comm));
+}

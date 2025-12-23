@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import * as os from 'os';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption } from './utils';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess } from './utils';
+
+const execAsync = promisify(exec);
 
 interface SavedTerminal {
     cwd: string;
@@ -15,9 +19,51 @@ interface TerminalState {
 
 const TERMINAL_STATE_KEY = 'terminalGridState';
 const SAVE_INTERVAL_MS = 5000; // Save every 5 seconds
+const ICON_UPDATE_INTERVAL_MS = 3000; // Update icons every 3 seconds
 
 let saveInterval: NodeJS.Timeout | undefined;
+let iconUpdateInterval: NodeJS.Timeout | undefined;
 let terminalCwdMap: Map<string, string> = new Map();
+
+// Icons for terminal status
+const CLAUDE_ICON = new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('terminal.ansiYellow'));
+const SHELL_ICON = new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('terminal.ansiGreen'));
+
+/**
+ * Check if a terminal is running Claude Code
+ */
+async function isTerminalRunningClaude(terminal: vscode.Terminal): Promise<boolean> {
+    try {
+        const pid = await terminal.processId;
+        if (!pid) return false;
+
+        // Get child processes of this terminal's shell
+        const { stdout } = await execAsync(
+            `pgrep -P ${pid} | xargs -I{} ps -o comm= -p {} 2>/dev/null || true`
+        );
+
+        // Check if any child process is Claude
+        const processes = stdout.trim().split('\n').filter(p => p.trim());
+        return processes.some(p => isClaudeProcess(p));
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Update terminal icons based on whether Claude is running
+ */
+async function updateTerminalIcons() {
+    for (const terminal of vscode.window.terminals) {
+        try {
+            const isRunningClaude = await isTerminalRunningClaude(terminal);
+            // VS Code API allows setting iconPath on terminals
+            (terminal as any).iconPath = isRunningClaude ? CLAUDE_ICON : SHELL_ICON;
+        } catch {
+            // Ignore errors for individual terminals
+        }
+    }
+}
 
 function getTerminalKey(terminal: vscode.Terminal): string {
     // Use terminal name + creation order as key since processId is async
@@ -299,6 +345,11 @@ export async function activate(context: vscode.ExtensionContext) {
     // Start periodic state saving
     startPeriodicSave(context);
 
+    // Start periodic icon updates
+    iconUpdateInterval = setInterval(updateTerminalIcons, ICON_UPDATE_INTERVAL_MS);
+    // Initial update
+    updateTerminalIcons();
+
     // Track terminal cwds via shell integration
     context.subscriptions.push(
         vscode.window.onDidChangeTerminalShellIntegration((e) => {
@@ -430,6 +481,12 @@ export async function deactivate() {
     if (saveInterval) {
         clearInterval(saveInterval);
         saveInterval = undefined;
+    }
+
+    // Stop icon updates
+    if (iconUpdateInterval) {
+        clearInterval(iconUpdateInterval);
+        iconUpdateInterval = undefined;
     }
 
     // Note: We can't reliably save state here during a crash

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption } from '../utils';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList } from '../utils';
 
 describe('getFolderName', () => {
     it('should return the last folder name from a path', () => {
@@ -88,6 +88,75 @@ describe('isBrowseOption', () => {
     it('should work with any label containing Browse...', () => {
         expect(isBrowseOption({ label: 'Browse...' })).toBe(true);
         expect(isBrowseOption({ label: 'Something Browse... else' })).toBe(true);
+    });
+});
+
+describe('isClaudeProcess', () => {
+    it('should return true for claude process', () => {
+        expect(isClaudeProcess('claude')).toBe(true);
+    });
+
+    it('should return true for Claude (case insensitive)', () => {
+        expect(isClaudeProcess('Claude')).toBe(true);
+    });
+
+    it('should return true for claude with path', () => {
+        expect(isClaudeProcess('/opt/homebrew/bin/claude')).toBe(true);
+    });
+
+    it('should return false for zsh', () => {
+        expect(isClaudeProcess('zsh')).toBe(false);
+    });
+
+    it('should return false for bash', () => {
+        expect(isClaudeProcess('bash')).toBe(false);
+    });
+
+    it('should return false for node', () => {
+        expect(isClaudeProcess('node')).toBe(false);
+    });
+});
+
+describe('parseProcessList', () => {
+    it('should parse ps output correctly', () => {
+        const stdout = `  1234 zsh\n  5678 node\n`;
+        const result = parseProcessList(stdout);
+        expect(result).toEqual([
+            { pid: 1234, comm: 'zsh' },
+            { pid: 5678, comm: 'node' }
+        ]);
+    });
+
+    it('should handle empty output', () => {
+        expect(parseProcessList('')).toEqual([]);
+    });
+
+    it('should filter invalid lines', () => {
+        const stdout = `  1234 zsh\n  invalid\n  5678 node\n`;
+        const result = parseProcessList(stdout);
+        expect(result).toHaveLength(2);
+    });
+});
+
+describe('hasClaudeInProcessList', () => {
+    it('should return true when claude is in list', () => {
+        const processes = [
+            { comm: 'zsh' },
+            { comm: 'claude' }
+        ];
+        expect(hasClaudeInProcessList(processes)).toBe(true);
+    });
+
+    it('should return false when claude is not in list', () => {
+        const processes = [
+            { comm: 'zsh' },
+            { comm: 'node' }
+        ];
+        expect(hasClaudeInProcessList(processes)).toBe(false);
+    });
+
+    it('should return false for empty list', () => {
+        expect(hasClaudeInProcessList([])).toBe(false);
     });
 });
 
