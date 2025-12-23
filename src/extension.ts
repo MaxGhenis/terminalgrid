@@ -226,13 +226,36 @@ function startPeriodicSave(context: vscode.ExtensionContext) {
 }
 
 function trackTerminalCwd(terminal: vscode.Terminal) {
-    // Set up shell integration listener for this terminal
+    const key = getTerminalKey(terminal);
+
+    // Try shell integration first (most reliable when shell is active)
     const shellIntegration = (terminal as any).shellIntegration;
-    if (shellIntegration) {
+    if (shellIntegration?.cwd) {
         const cwd = shellIntegration.cwd;
-        if (cwd) {
-            const cwdPath = cwd instanceof vscode.Uri ? cwd.fsPath : String(cwd);
-            terminalCwdMap.set(getTerminalKey(terminal), cwdPath);
+        const cwdPath = cwd instanceof vscode.Uri ? cwd.fsPath : String(cwd);
+        terminalCwdMap.set(key, cwdPath);
+        console.log(`TerminalGrid: Tracked cwd via shell integration: ${cwdPath}`);
+        return;
+    }
+
+    // Try to get cwd from creation options
+    const creationOptions = terminal.creationOptions as vscode.TerminalOptions;
+    if (creationOptions?.cwd) {
+        const cwd = creationOptions.cwd;
+        const cwdPath = cwd instanceof vscode.Uri ? cwd.fsPath : String(cwd);
+        terminalCwdMap.set(key, cwdPath);
+        console.log(`TerminalGrid: Tracked cwd via creationOptions: ${cwdPath}`);
+        return;
+    }
+
+    // Fall back to workspace folder
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders && workspaceFolders.length > 0) {
+        const cwdPath = workspaceFolders[0].uri.fsPath;
+        // Only set if we don't already have a cwd for this terminal
+        if (!terminalCwdMap.has(key)) {
+            terminalCwdMap.set(key, cwdPath);
+            console.log(`TerminalGrid: Tracked cwd via workspace folder: ${cwdPath}`);
         }
     }
 }
