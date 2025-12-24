@@ -76,14 +76,33 @@ async function getClaudeStatus(terminal: vscode.Terminal): Promise<ClaudeStatus>
             return { hasClaude: false, isActive: false };
         }
 
-        // Check if Claude has any child processes (running tools)
-        const { stdout: claudeChildren } = await execAsync(
-            `pgrep -P ${claudePid} 2>/dev/null || echo ""`
+        // Check if Claude has active tool processes (not just MCP servers)
+        // Get child process names, not just count
+        const { stdout: claudeChildInfo } = await execAsync(
+            `pgrep -P ${claudePid} 2>/dev/null | xargs -I{} ps -o comm= -p {} 2>/dev/null || echo ""`
         );
 
-        const hasChildren = claudeChildren.trim().split('\n').filter(p => p.trim()).length > 0;
+        const childProcesses = claudeChildInfo.trim().split('\n').filter(p => p.trim());
 
-        return { hasClaude: true, isActive: hasChildren };
+        // Filter out persistent/background processes that don't indicate active work
+        const backgroundProcesses = ['node', 'npx', 'npm', 'mcp', 'uvx', 'uv', 'python', 'python3'];
+        const activeChildren = childProcesses.filter(proc => {
+            const name = proc.toLowerCase();
+            // These indicate active tool use
+            if (name.includes('bash') || name.includes('zsh') || name.includes('sh')) {
+                return true;
+            }
+            if (name.includes('git') || name.includes('grep') || name.includes('find')) {
+                return true;
+            }
+            if (name.includes('cat') || name.includes('ls') || name.includes('rm')) {
+                return true;
+            }
+            // Exclude known background processes
+            return !backgroundProcesses.some(bg => name.includes(bg));
+        });
+
+        return { hasClaude: true, isActive: activeChildren.length > 0 };
     } catch {
         return { hasClaude: false, isActive: false };
     }
