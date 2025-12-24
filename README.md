@@ -1,5 +1,8 @@
 # TerminalGrid
 
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/MaxGhenis.terminalgrid?label=VS%20Code%20Marketplace)](https://marketplace.visualstudio.com/items?itemName=MaxGhenis.terminalgrid)
+[![GitHub Release](https://img.shields.io/github/v/release/MaxGhenis/terminalgrid)](https://github.com/MaxGhenis/terminalgrid/releases/latest)
+
 Transform VS Code into a powerful terminal workspace with keyboard-driven grid management and optional auto-launch for CLI tools.
 
 ## Features
@@ -35,15 +38,22 @@ Keyboard-driven terminal management is useful even without auto-launch. Quickly 
 
 ## Installation
 
-**Pre-release (current):**
+**VS Code Marketplace (recommended):**
 
-1. Download the latest `.vsix` from [GitHub Releases](https://github.com/MaxGhenis/terminalgrid/releases/latest)
-2. In VS Code: Extensions → `...` menu → "Install from VSIX..."
-3. Select the downloaded file
-4. Configure your auto-launch command (or leave empty for plain terminals)
-5. Start creating your grid!
+1. Open VS Code
+2. Go to Extensions (`Cmd+Shift+X` / `Ctrl+Shift+X`)
+3. Search for "TerminalGrid"
+4. Click Install
 
-**VS Code Marketplace:** *Coming soon*
+Or install via command line:
+```bash
+code --install-extension MaxGhenis.terminalgrid
+```
+
+**Manual Installation:**
+
+Download the `.vsix` from [GitHub Releases](https://github.com/MaxGhenis/terminalgrid/releases/latest), then:
+- In VS Code: Extensions → `...` menu → "Install from VSIX..."
 
 ## Configuration
 
