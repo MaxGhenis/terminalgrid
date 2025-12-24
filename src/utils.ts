@@ -106,3 +106,46 @@ export function hasDuplicateCwds<T extends { cwd: string }>(terminals: T[]): boo
     const cwds = terminals.map(t => t.cwd);
     return new Set(cwds).size < cwds.length;
 }
+
+/**
+ * Try to infer CWD from terminal name by searching common paths
+ * @param name - Terminal name (e.g., "marginal-child")
+ * @param searchPaths - Paths to search for matching folders
+ * @returns Path if found, undefined otherwise
+ */
+export function inferCwdFromName(name: string, searchPaths: string[]): string | undefined {
+    // Import fs dynamically to avoid issues in test environment
+    let fs: typeof import('fs');
+    let path: typeof import('path');
+    try {
+        fs = require('fs');
+        path = require('path');
+    } catch {
+        return undefined;
+    }
+
+    // Normalize name for matching
+    const normalizedName = name.toLowerCase().trim();
+
+    for (const searchPath of searchPaths) {
+        try {
+            // Check if folder with exact name exists
+            const exactPath = path.join(searchPath, name);
+            if (fs.existsSync(exactPath) && fs.statSync(exactPath).isDirectory()) {
+                return exactPath;
+            }
+
+            // Check subdirectories for matching name
+            const entries = fs.readdirSync(searchPath, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.isDirectory() && entry.name.toLowerCase() === normalizedName) {
+                    return path.join(searchPath, entry.name);
+                }
+            }
+        } catch {
+            // Path doesn't exist or isn't readable, continue
+        }
+    }
+
+    return undefined;
+}

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, deduplicateTerminalsByCwd, hasDuplicateCwds } from './utils';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName } from './utils';
 
 const execAsync = promisify(exec);
 
@@ -406,8 +406,42 @@ async function getTerminalCwd(terminal: vscode.Terminal): Promise<string | undef
 async function collectTerminalState(): Promise<SavedTerminal[]> {
     const terminals: SavedTerminal[] = [];
 
+    // Get common search paths for inferring cwd from name
+    const homeDir = os.homedir();
+    const searchPaths = [
+        homeDir,
+        `${homeDir}/PolicyEngine`,
+        `${homeDir}/projects`,
+        `${homeDir}/code`,
+        `${homeDir}/dev`,
+        `${homeDir}/Documents`,
+    ];
+
+    // Add workspace folders to search paths
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders) {
+        for (const folder of workspaceFolders) {
+            searchPaths.push(folder.uri.fsPath);
+            // Also add parent of workspace folder
+            const parent = folder.uri.fsPath.split('/').slice(0, -1).join('/');
+            if (parent && !searchPaths.includes(parent)) {
+                searchPaths.push(parent);
+            }
+        }
+    }
+
     for (const terminal of vscode.window.terminals) {
-        const cwd = await getTerminalCwd(terminal);
+        let cwd = await getTerminalCwd(terminal);
+
+        if (!cwd) {
+            // Try to infer cwd from terminal name
+            const inferredCwd = inferCwdFromName(terminal.name, searchPaths);
+            if (inferredCwd) {
+                cwd = inferredCwd;
+                console.log(`TerminalGrid: Inferred cwd for "${terminal.name}": ${cwd}`);
+            }
+        }
+
         if (cwd) {
             terminals.push({
                 cwd,
@@ -415,7 +449,12 @@ async function collectTerminalState(): Promise<SavedTerminal[]> {
             });
             console.log(`TerminalGrid: Collected terminal "${terminal.name}" with cwd: ${cwd}`);
         } else {
-            console.log(`TerminalGrid: Could not get cwd for terminal "${terminal.name}"`);
+            // Last resort: save with home dir so terminal isn't lost
+            terminals.push({
+                cwd: homeDir,
+                name: terminal.name
+            });
+            console.log(`TerminalGrid: Saved terminal "${terminal.name}" with fallback home dir`);
         }
     }
 

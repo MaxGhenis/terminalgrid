@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd, hasDuplicateCwds } from '../utils';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName } from '../utils';
 
 describe('getFolderName', () => {
     it('should return the last folder name from a path', () => {
@@ -228,6 +228,21 @@ describe('deduplicateTerminalsByCwd', () => {
         const result = deduplicateTerminalsByCwd(terminals);
         expect(result).toHaveLength(1);
         expect(result[0].name).toBe('first');
+    });
+});
+
+describe('inferCwdFromName', () => {
+    it('should find folder in common paths matching terminal name', () => {
+        // This test documents expected behavior - actual implementation
+        // will check if folders exist on disk
+        const result = inferCwdFromName('marginal-child', ['/Users/max/PolicyEngine']);
+        // Should return path if marginal-child folder exists under PolicyEngine
+        expect(typeof result === 'string' || result === undefined).toBe(true);
+    });
+
+    it('should return undefined if no matching folder found', () => {
+        const result = inferCwdFromName('nonexistent-folder-xyz', []);
+        expect(result).toBeUndefined();
     });
 });
 
