@@ -38,26 +38,54 @@ const TERMINAL_ICON = new vscode.ThemeIcon('terminal', new vscode.ThemeColor('te
 // Status bar item for showing Claude status
 let statusBarItem: vscode.StatusBarItem | undefined;
 
+interface ClaudeStatus {
+    hasClaude: boolean;
+    isActive: boolean;  // true if Claude is running tools (has children)
+}
+
 /**
- * Check if a terminal is running Claude Code
+ * Check if a terminal is running Claude Code and if it's actively working
  */
-async function isTerminalRunningClaude(terminal: vscode.Terminal): Promise<boolean> {
+async function getClaudeStatus(terminal: vscode.Terminal): Promise<ClaudeStatus> {
     try {
         const pid = await terminal.processId;
         if (!pid) {
-            return false;
+            return { hasClaude: false, isActive: false };
         }
 
         // Get child processes of this terminal's shell
         const { stdout } = await execAsync(
-            `pgrep -P ${pid} | xargs -I{} ps -o comm= -p {} 2>/dev/null || true`
+            `pgrep -P ${pid} | xargs -I{} ps -o pid=,comm= -p {} 2>/dev/null || true`
         );
 
-        // Check if any child process is Claude
-        const processes = stdout.trim().split('\n').filter(p => p.trim());
-        return processes.some(p => isClaudeProcess(p));
+        // Find Claude process
+        const lines = stdout.trim().split('\n').filter(p => p.trim());
+        let claudePid: number | null = null;
+
+        for (const line of lines) {
+            const parts = line.trim().split(/\s+/);
+            const childPid = parseInt(parts[0], 10);
+            const comm = parts.slice(1).join(' ');
+            if (isClaudeProcess(comm)) {
+                claudePid = childPid;
+                break;
+            }
+        }
+
+        if (!claudePid) {
+            return { hasClaude: false, isActive: false };
+        }
+
+        // Check if Claude has any child processes (running tools)
+        const { stdout: claudeChildren } = await execAsync(
+            `pgrep -P ${claudePid} 2>/dev/null || echo ""`
+        );
+
+        const hasChildren = claudeChildren.trim().split('\n').filter(p => p.trim()).length > 0;
+
+        return { hasClaude: true, isActive: hasChildren };
     } catch {
-        return false;
+        return { hasClaude: false, isActive: false };
     }
 }
 
@@ -65,7 +93,8 @@ async function isTerminalRunningClaude(terminal: vscode.Terminal): Promise<boole
 interface TerminalStatus {
     terminal: vscode.Terminal;
     name: string;
-    isRunningClaude: boolean;
+    hasClaude: boolean;
+    isActive: boolean;  // Claude is actively running tools
 }
 
 let lastTerminalStatuses: TerminalStatus[] = [];
@@ -78,20 +107,26 @@ async function updateStatusBar() {
         return;
     }
 
-    let claudeCount = 0;
-    let shellCount = 0;
+    let activeCount = 0;    // Claude running tools
+    let standbyCount = 0;   // Claude idle
+    let shellCount = 0;     // No Claude
     const statuses: TerminalStatus[] = [];
 
     for (const terminal of vscode.window.terminals) {
         try {
-            const isRunningClaude = await isTerminalRunningClaude(terminal);
+            const claudeStatus = await getClaudeStatus(terminal);
             statuses.push({
                 terminal,
                 name: terminal.name,
-                isRunningClaude
+                hasClaude: claudeStatus.hasClaude,
+                isActive: claudeStatus.isActive
             });
-            if (isRunningClaude) {
-                claudeCount++;
+            if (claudeStatus.hasClaude) {
+                if (claudeStatus.isActive) {
+                    activeCount++;
+                } else {
+                    standbyCount++;
+                }
             } else {
                 shellCount++;
             }
@@ -99,7 +134,8 @@ async function updateStatusBar() {
             statuses.push({
                 terminal,
                 name: terminal.name,
-                isRunningClaude: false
+                hasClaude: false,
+                isActive: false
             });
             shellCount++;
         }
@@ -107,18 +143,36 @@ async function updateStatusBar() {
 
     lastTerminalStatuses = statuses;
 
-    if (claudeCount > 0 || shellCount > 0) {
-        statusBarItem.text = `$(terminal) ${claudeCount > 0 ? `🟡${claudeCount}` : ''}${shellCount > 0 ? ` 🟢${shellCount}` : ''}`;
+    if (activeCount > 0 || standbyCount > 0 || shellCount > 0) {
+        // 🟡 = active Claude, 🟢 = standby Claude, ⚪ = shell
+        let text = '$(terminal)';
+        if (activeCount > 0) {
+            text += ` 🟡${activeCount}`;
+        }
+        if (standbyCount > 0) {
+            text += ` 🟢${standbyCount}`;
+        }
+        if (shellCount > 0) {
+            text += ` ⚪${shellCount}`;
+        }
+        statusBarItem.text = text;
+
         // Build tooltip showing which terminals are which
-        const claudeTerminals = statuses.filter(s => s.isRunningClaude).map(s => s.name);
-        const shellTerminals = statuses.filter(s => !s.isRunningClaude).map(s => s.name);
+        const activeTerminals = statuses.filter(s => s.hasClaude && s.isActive).map(s => s.name);
+        const standbyTerminals = statuses.filter(s => s.hasClaude && !s.isActive).map(s => s.name);
+        const shellTerminals = statuses.filter(s => !s.hasClaude).map(s => s.name);
+
         let tooltip = '';
-        if (claudeTerminals.length > 0) {
-            tooltip += `🟡 Claude: ${claudeTerminals.join(', ')}`;
+        if (activeTerminals.length > 0) {
+            tooltip += `🟡 Running: ${activeTerminals.join(', ')}`;
+        }
+        if (standbyTerminals.length > 0) {
+            if (tooltip) { tooltip += '\n'; }
+            tooltip += `🟢 Standby: ${standbyTerminals.join(', ')}`;
         }
         if (shellTerminals.length > 0) {
             if (tooltip) { tooltip += '\n'; }
-            tooltip += `🟢 Shell: ${shellTerminals.join(', ')}`;
+            tooltip += `⚪ Shell: ${shellTerminals.join(', ')}`;
         }
         tooltip += '\n\nClick to show terminal list';
         statusBarItem.tooltip = tooltip;
@@ -743,11 +797,24 @@ export async function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const items = lastTerminalStatuses.map(status => ({
-                label: `${status.isRunningClaude ? '🟡' : '🟢'} ${status.name}`,
-                description: status.isRunningClaude ? 'Claude running' : 'Shell',
-                terminal: status.terminal
-            }));
+            const items = lastTerminalStatuses.map(status => {
+                let icon = '⚪';
+                let desc = 'Shell';
+                if (status.hasClaude) {
+                    if (status.isActive) {
+                        icon = '🟡';
+                        desc = 'Claude running';
+                    } else {
+                        icon = '🟢';
+                        desc = 'Claude standby';
+                    }
+                }
+                return {
+                    label: `${icon} ${status.name}`,
+                    description: desc,
+                    terminal: status.terminal
+                };
+            });
 
             const selected = await vscode.window.showQuickPick(items, {
                 placeHolder: 'Select terminal to focus',
