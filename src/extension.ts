@@ -624,6 +624,61 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // Register refresh terminals command - recreates terminals with proper names
+    context.subscriptions.push(
+        vscode.commands.registerCommand('terminalgrid.refreshTerminals', async () => {
+            const config = vscode.workspace.getConfiguration('terminalgrid');
+            const autoNameByFolder = config.get('autoNameByFolder', true);
+            const autoLaunchCommand = config.get<string>('autoLaunchCommand', '').trim();
+
+            const terminals = [...vscode.window.terminals];
+            if (terminals.length === 0) {
+                vscode.window.showInformationMessage('No terminals to refresh');
+                return;
+            }
+
+            // Collect terminal info before disposing
+            const terminalInfos: { cwd: string; name: string }[] = [];
+            for (const terminal of terminals) {
+                const cwd = await getTerminalCwd(terminal);
+                if (cwd) {
+                    const newName = autoNameByFolder ? getFolderName(cwd) : terminal.name;
+                    terminalInfos.push({ cwd, name: newName });
+                }
+            }
+
+            // Dispose old terminals
+            for (const terminal of terminals) {
+                terminal.dispose();
+            }
+
+            // Wait for disposal
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            // Recreate with proper names
+            for (const info of terminalInfos) {
+                const terminalOptions: vscode.TerminalOptions = {
+                    cwd: info.cwd,
+                    name: info.name,
+                    iconPath: TERMINAL_ICON
+                };
+
+                const terminal = vscode.window.createTerminal(terminalOptions);
+                terminalCwdMap.set(getTerminalKey(terminal), info.cwd);
+
+                if (autoLaunchCommand) {
+                    setTimeout(() => {
+                        terminal.sendText(autoLaunchCommand);
+                    }, 500);
+                }
+            }
+
+            vscode.window.showInformationMessage(
+                `Refreshed ${terminalInfos.length} terminal(s) with folder names`
+            );
+        })
+    );
+
     // Watch for config changes
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration(async (e) => {

@@ -41,6 +41,10 @@
       {
         "command": "terminalgrid.openTerminal",
         "title": "Open New Terminal"
+      },
+      {
+        "command": "terminalgrid.refreshTerminals",
+        "title": "TerminalGrid: Refresh Terminals (rename by folder)"
       }
     ],
     "keybindings": [
@@ -64,6 +68,13 @@
         "mac": "cmd+k cmd+n",
         "win": "ctrl+k ctrl+n",
         "linux": "ctrl+k ctrl+n"
+      },
+      {
+        "command": "terminalgrid.refreshTerminals",
+        "key": "cmd+k cmd+r",
+        "mac": "cmd+k cmd+r",
+        "win": "ctrl+k ctrl+r",
+        "linux": "ctrl+k ctrl+r"
       }
     ],
     "configuration": {
