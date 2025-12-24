@@ -96,3 +96,13 @@ export function deduplicateTerminalsByCwd<T extends { cwd: string }>(terminals: 
         return true;
     });
 }
+
+/**
+ * Check if any terminals have duplicate CWDs
+ * @param terminals - Array of terminal-like objects with cwd
+ * @returns true if duplicates exist
+ */
+export function hasDuplicateCwds<T extends { cwd: string }>(terminals: T[]): boolean {
+    const cwds = terminals.map(t => t.cwd);
+    return new Set(cwds).size < cwds.length;
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd } from '../utils';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd, hasDuplicateCwds } from '../utils';
 
 describe('getFolderName', () => {
     it('should return the last folder name from a path', () => {
@@ -164,6 +164,29 @@ describe('hasClaudeInProcessList', () => {
 
     it('should return false for empty list', () => {
         expect(hasClaudeInProcessList([])).toBe(false);
+    });
+});
+
+describe('hasDuplicateCwds', () => {
+    it('should return true when terminals have duplicate cwds', () => {
+        const terminals = [
+            { name: 'eggnest', cwd: '/path/to/eggnest' },
+            { name: 'givewell', cwd: '/path/to/givewell' },
+            { name: 'eggnest-2', cwd: '/path/to/eggnest' },  // duplicate
+        ];
+        expect(hasDuplicateCwds(terminals)).toBe(true);
+    });
+
+    it('should return false when no duplicates', () => {
+        const terminals = [
+            { name: 'a', cwd: '/path/a' },
+            { name: 'b', cwd: '/path/b' },
+        ];
+        expect(hasDuplicateCwds(terminals)).toBe(false);
+    });
+
+    it('should return false for empty array', () => {
+        expect(hasDuplicateCwds([])).toBe(false);
     });
 });
 

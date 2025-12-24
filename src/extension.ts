@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, deduplicateTerminalsByCwd } from './utils';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, deduplicateTerminalsByCwd, hasDuplicateCwds } from './utils';
 
 const execAsync = promisify(exec);
 
@@ -649,6 +649,60 @@ async function trackTerminalCwd(terminal: vscode.Terminal) {
     }
 }
 
+/**
+ * Check for duplicate terminals and remove them
+ * This handles cases where VS Code's built-in persistence restored terminals incorrectly
+ */
+async function deduplicateExistingTerminals() {
+    const terminals = vscode.window.terminals;
+    if (terminals.length < 2) {
+        return;
+    }
+
+    // Collect terminal info with cwds
+    const terminalInfos: { terminal: vscode.Terminal; cwd: string; name: string }[] = [];
+    for (const terminal of terminals) {
+        const cwd = await getTerminalCwd(terminal);
+        if (cwd) {
+            terminalInfos.push({ terminal, cwd, name: terminal.name });
+        }
+    }
+
+    // Check for duplicates
+    if (!hasDuplicateCwds(terminalInfos)) {
+        console.log('TerminalGrid: No duplicate terminals found');
+        return;
+    }
+
+    console.log(`TerminalGrid: Found duplicate terminals, deduplicating...`);
+
+    // Get unique terminals (keep first occurrence of each cwd)
+    const seenCwds = new Set<string>();
+    const toKeep: typeof terminalInfos = [];
+    const toRemove: vscode.Terminal[] = [];
+
+    for (const info of terminalInfos) {
+        if (seenCwds.has(info.cwd)) {
+            toRemove.push(info.terminal);
+            console.log(`TerminalGrid: Will remove duplicate "${info.name}" (${info.cwd})`);
+        } else {
+            seenCwds.add(info.cwd);
+            toKeep.push(info);
+        }
+    }
+
+    // Dispose duplicates
+    for (const terminal of toRemove) {
+        terminal.dispose();
+    }
+
+    if (toRemove.length > 0) {
+        vscode.window.showInformationMessage(
+            `TerminalGrid: Removed ${toRemove.length} duplicate terminal(s)`
+        );
+    }
+}
+
 export async function activate(context: vscode.ExtensionContext) {
     console.log('TerminalGrid is now active');
 
@@ -694,8 +748,11 @@ export async function activate(context: vscode.ExtensionContext) {
     // Track ALL existing terminals at startup (important for crash recovery)
     console.log(`TerminalGrid: Tracking ${vscode.window.terminals.length} existing terminals at startup`);
     for (const terminal of vscode.window.terminals) {
-        trackTerminalCwd(terminal);
+        await trackTerminalCwd(terminal);
     }
+
+    // Check for and fix duplicate terminals (VS Code may have restored incorrectly)
+    await deduplicateExistingTerminals();
 
     // Track when terminals are closed
     context.subscriptions.push(
