@@ -168,8 +168,31 @@ async function configureTerminalSettings() {
     vscode.window.showInformationMessage('TerminalGrid configured!');
 }
 
-function getTerminalCwd(terminal: vscode.Terminal): string | undefined {
-    // Try shell integration first (most reliable)
+async function getProcessCwd(pid: number): Promise<string | undefined> {
+    try {
+        // On macOS/Linux, we can read the process's cwd
+        const platform = os.platform();
+        if (platform === 'darwin') {
+            const { stdout } = await execAsync(`lsof -p ${pid} -Fn 2>/dev/null | grep '^ncwd' | cut -c5-`);
+            const cwd = stdout.trim();
+            if (cwd && cwd.length > 0) {
+                return cwd;
+            }
+        } else if (platform === 'linux') {
+            const { stdout } = await execAsync(`readlink -f /proc/${pid}/cwd 2>/dev/null`);
+            const cwd = stdout.trim();
+            if (cwd && cwd.length > 0) {
+                return cwd;
+            }
+        }
+    } catch {
+        // Silently fail - process may have exited or we don't have permission
+    }
+    return undefined;
+}
+
+async function getTerminalCwd(terminal: vscode.Terminal): Promise<string | undefined> {
+    // Try shell integration first (most reliable when available)
     const shellIntegration = (terminal as unknown as ShellIntegrationCwd).shellIntegration;
     if (shellIntegration?.cwd) {
         const cwdUri = shellIntegration.cwd;
@@ -179,20 +202,39 @@ function getTerminalCwd(terminal: vscode.Terminal): string | undefined {
         return String(cwdUri);
     }
 
-    // Fall back to stored cwd from our tracking
-    return terminalCwdMap.get(getTerminalKey(terminal));
+    // Try stored cwd from our tracking
+    const storedCwd = terminalCwdMap.get(getTerminalKey(terminal));
+    if (storedCwd) {
+        return storedCwd;
+    }
+
+    // Try to get cwd from the terminal's process
+    const pid = await terminal.processId;
+    if (pid) {
+        const processCwd = await getProcessCwd(pid);
+        if (processCwd) {
+            // Cache it for future use
+            terminalCwdMap.set(getTerminalKey(terminal), processCwd);
+            return processCwd;
+        }
+    }
+
+    return undefined;
 }
 
-function collectTerminalState(): SavedTerminal[] {
+async function collectTerminalState(): Promise<SavedTerminal[]> {
     const terminals: SavedTerminal[] = [];
 
     for (const terminal of vscode.window.terminals) {
-        const cwd = getTerminalCwd(terminal);
+        const cwd = await getTerminalCwd(terminal);
         if (cwd) {
             terminals.push({
                 cwd,
                 name: terminal.name
             });
+            console.log(`TerminalGrid: Collected terminal "${terminal.name}" with cwd: ${cwd}`);
+        } else {
+            console.log(`TerminalGrid: Could not get cwd for terminal "${terminal.name}"`);
         }
     }
 
@@ -200,7 +242,7 @@ function collectTerminalState(): SavedTerminal[] {
 }
 
 async function saveTerminalState(context: vscode.ExtensionContext, gracefulExit: boolean = false) {
-    const terminals = collectTerminalState();
+    const terminals = await collectTerminalState();
 
     // Debug: log what we're trying to save
     console.log(`TerminalGrid: Collecting state - found ${vscode.window.terminals.length} terminals`);
@@ -363,7 +405,7 @@ function startPeriodicSave(context: vscode.ExtensionContext) {
     }, SAVE_INTERVAL_MS);
 }
 
-function trackTerminalCwd(terminal: vscode.Terminal) {
+async function trackTerminalCwd(terminal: vscode.Terminal) {
     const key = getTerminalKey(terminal);
 
     // Try shell integration first (most reliable when shell is active)
@@ -384,6 +426,17 @@ function trackTerminalCwd(terminal: vscode.Terminal) {
         terminalCwdMap.set(key, cwdPath);
         console.log(`TerminalGrid: Tracked cwd via creationOptions: ${cwdPath}`);
         return;
+    }
+
+    // Try to get cwd from the terminal's process (most reliable for VS Code-restored terminals)
+    const pid = await terminal.processId;
+    if (pid) {
+        const processCwd = await getProcessCwd(pid);
+        if (processCwd) {
+            terminalCwdMap.set(key, processCwd);
+            console.log(`TerminalGrid: Tracked cwd via process ${pid}: ${processCwd}`);
+            return;
+        }
     }
 
     // Try to match terminal name to a workspace folder
