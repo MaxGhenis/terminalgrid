@@ -2,11 +2,14 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - master
+    paths-ignore:
+      - '*.md'
+      - '.github/**'
 
 jobs:
-  release:
+  publish:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,17 +27,37 @@ jobs:
     - name: Compile TypeScript
       run: npm run compile
 
-    - name: Package extension
-      run: |
-        npm install -g @vscode/vsce
-        vsce package
+    - name: Install vsce
+      run: npm install -g @vscode/vsce
 
-    - name: Create Release
+    - name: Bump version and publish
+      id: publish
+      run: |
+        # Bump patch version and capture new version
+        npm version patch --no-git-tag-version
+        VERSION=$(node -p "require('./package.json').version")
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+        # Package and publish
+        vsce package
+        vsce publish
+      env:
+        VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+    - name: Commit version bump
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add package.json package-lock.json
+        git commit -m "Bump version to ${{ steps.publish.outputs.version }}"
+        git push
+
+    - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: v${{ steps.publish.outputs.version }}
+        name: v${{ steps.publish.outputs.version }}
         files: '*.vsix'
         generate_release_notes: true
-        draft: false
-        prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
