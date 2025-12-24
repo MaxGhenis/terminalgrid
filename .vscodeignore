@@ -8,3 +8,13 @@ vsc-extension-quickstart.md
 **/.eslintrc.json
 **/*.map
 **/*.ts
+node_modules/**
+.github/**
+CLAUDE.md
+DEVELOPMENT.md
+BLOG_POST.md
+create_icon.py
+publisher-logo*.png
+bun.lock
+vitest.config.ts
+out/test/**

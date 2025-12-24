@@ -191,8 +191,14 @@ function collectTerminalState(): SavedTerminal[] {
 async function saveTerminalState(context: vscode.ExtensionContext, gracefulExit: boolean = false) {
     const terminals = collectTerminalState();
 
+    // Debug: log what we're trying to save
+    console.log(`TerminalGrid: Collecting state - found ${vscode.window.terminals.length} terminals`);
+    console.log(`TerminalGrid: terminalCwdMap has ${terminalCwdMap.size} entries:`, Array.from(terminalCwdMap.entries()));
+    console.log(`TerminalGrid: Collected ${terminals.length} terminals with cwds:`, terminals);
+
     if (terminals.length === 0 && !gracefulExit) {
         // Don't save empty state unless it's a graceful exit
+        console.log('TerminalGrid: No terminals to save, skipping');
         return;
     }
 
@@ -203,18 +209,24 @@ async function saveTerminalState(context: vscode.ExtensionContext, gracefulExit:
     };
 
     await context.globalState.update(TERMINAL_STATE_KEY, state);
-    console.log(`TerminalGrid: Saved ${terminals.length} terminal states`);
+    console.log(`TerminalGrid: Saved ${terminals.length} terminal states to globalState`);
 }
 
 async function restoreTerminals(context: vscode.ExtensionContext): Promise<boolean> {
     const config = vscode.workspace.getConfiguration('terminalgrid');
     const enableRestore = config.get('enableDirectoryRestore', true);
 
+    console.log('TerminalGrid: restoreTerminals called');
+    console.log(`TerminalGrid: enableRestore=${enableRestore}`);
+    console.log(`TerminalGrid: Current terminals: ${vscode.window.terminals.length}`);
+
     if (!enableRestore) {
+        console.log('TerminalGrid: Restore disabled, skipping');
         return false;
     }
 
     const state = context.globalState.get<TerminalState>(TERMINAL_STATE_KEY);
+    console.log('TerminalGrid: Loaded state from globalState:', state);
 
     if (!state) {
         return false;
