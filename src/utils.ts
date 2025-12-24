@@ -80,3 +80,19 @@ export function parseProcessList(stdout: string): { pid: number; comm: string }[
 export function hasClaudeInProcessList(processes: { comm: string }[]): boolean {
     return processes.some(p => isClaudeProcess(p.comm));
 }
+
+/**
+ * Deduplicate terminals by CWD, keeping first occurrence
+ * @param terminals - Array of saved terminal objects with cwd
+ * @returns Array with duplicate cwds removed
+ */
+export function deduplicateTerminalsByCwd<T extends { cwd: string }>(terminals: T[]): T[] {
+    const seenCwds = new Set<string>();
+    return terminals.filter(t => {
+        if (seenCwds.has(t.cwd)) {
+            return false;
+        }
+        seenCwds.add(t.cwd);
+        return true;
+    });
+}

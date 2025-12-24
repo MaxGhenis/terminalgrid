@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess } from './utils';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, deduplicateTerminalsByCwd } from './utils';
 
 const execAsync = promisify(exec);
 
@@ -490,6 +490,10 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
     const autoLaunchCommand = config.get<string>('autoLaunchCommand', '').trim();
     const autoNameByFolder = config.get('autoNameByFolder', true);
 
+    // Deduplicate terminals by CWD (keep first occurrence with each unique cwd)
+    const uniqueTerminals = deduplicateTerminalsByCwd(state.terminals);
+    console.log(`TerminalGrid: Deduplicated ${state.terminals.length} -> ${uniqueTerminals.length} terminals`);
+
     // Check if there are already terminals open (VS Code restored them)
     if (vscode.window.terminals.length > 0) {
         console.log('TerminalGrid: VS Code restored terminals, but we need to replace them with correct cwds/names');
@@ -504,9 +508,9 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         await new Promise(resolve => setTimeout(resolve, 500));
 
         // Now create our terminals with correct cwds and names
-        console.log(`TerminalGrid: Creating ${state.terminals.length} terminals with saved cwds/names`);
+        console.log(`TerminalGrid: Creating ${uniqueTerminals.length} terminals with saved cwds/names`);
 
-        for (const savedTerminal of state.terminals) {
+        for (const savedTerminal of uniqueTerminals) {
             const terminalName = savedTerminal.name ||
                 (autoNameByFolder ? getFolderName(savedTerminal.cwd) : undefined);
 
@@ -530,16 +534,16 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         }
 
         vscode.window.showInformationMessage(
-            `TerminalGrid: Restored ${state.terminals.length} terminal(s) with saved directories`
+            `TerminalGrid: Restored ${uniqueTerminals.length} terminal(s) with saved directories`
         );
 
         await context.globalState.update(TERMINAL_STATE_KEY, undefined);
         return true;
     }
 
-    console.log(`TerminalGrid: Restoring ${state.terminals.length} terminals from crash`);
+    console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals from crash`);
 
-    for (const savedTerminal of state.terminals) {
+    for (const savedTerminal of uniqueTerminals) {
         // Use saved name, or auto-generate from folder if enabled
         const terminalName = savedTerminal.name ||
             (autoNameByFolder ? getFolderName(savedTerminal.cwd) : undefined);
@@ -563,14 +567,14 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
             }, 500);
         }
 
-        terminal.show();
+        // Don't call terminal.show() - it can create empty editor groups
     }
 
     // Clear the saved state after restore
     await context.globalState.update(TERMINAL_STATE_KEY, undefined);
 
     vscode.window.showInformationMessage(
-        `TerminalGrid: Restored ${state.terminals.length} terminal(s) from previous session`
+        `TerminalGrid: Restored ${uniqueTerminals.length} terminal(s) from previous session`
     );
 
     return true;
@@ -786,7 +790,11 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('terminalgrid.splitDownAndOpenTerminal', async () => {
             await vscode.commands.executeCommand('workbench.action.splitEditorDown');
-            createNamedTerminal();
+            const terminal = await createNamedTerminal();
+            if (!terminal) {
+                // User cancelled - close the empty editor group
+                await vscode.commands.executeCommand('workbench.action.closeEditorsInGroup');
+            }
         })
     );
 
@@ -794,7 +802,11 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('terminalgrid.splitRightAndOpenTerminal', async () => {
             await vscode.commands.executeCommand('workbench.action.splitEditorRight');
-            createNamedTerminal();
+            const terminal = await createNamedTerminal();
+            if (!terminal) {
+                // User cancelled - close the empty editor group
+                await vscode.commands.executeCommand('workbench.action.closeEditorsInGroup');
+            }
         })
     );
 

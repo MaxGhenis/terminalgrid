@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList } from '../utils';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd } from '../utils';
 
 describe('getFolderName', () => {
     it('should return the last folder name from a path', () => {
@@ -164,6 +164,47 @@ describe('hasClaudeInProcessList', () => {
 
     it('should return false for empty list', () => {
         expect(hasClaudeInProcessList([])).toBe(false);
+    });
+});
+
+describe('deduplicateTerminalsByCwd', () => {
+    it('should remove duplicate cwds keeping first occurrence', () => {
+        const terminals = [
+            { cwd: '/path/to/eggnest', name: 'eggnest' },
+            { cwd: '/path/to/cosilicoai', name: 'CosilicoAI' },
+            { cwd: '/path/to/eggnest', name: 'eggnest-2' },  // duplicate
+        ];
+        const result = deduplicateTerminalsByCwd(terminals);
+        expect(result).toHaveLength(2);
+        expect(result[0].cwd).toBe('/path/to/eggnest');
+        expect(result[0].name).toBe('eggnest');
+        expect(result[1].cwd).toBe('/path/to/cosilicoai');
+    });
+
+    it('should return all terminals when no duplicates', () => {
+        const terminals = [
+            { cwd: '/path/to/a', name: 'a' },
+            { cwd: '/path/to/b', name: 'b' },
+            { cwd: '/path/to/c', name: 'c' },
+        ];
+        const result = deduplicateTerminalsByCwd(terminals);
+        expect(result).toHaveLength(3);
+    });
+
+    it('should handle empty array', () => {
+        const result = deduplicateTerminalsByCwd([]);
+        expect(result).toHaveLength(0);
+    });
+
+    it('should handle all duplicates', () => {
+        const terminals = [
+            { cwd: '/same/path', name: 'first' },
+            { cwd: '/same/path', name: 'second' },
+            { cwd: '/same/path', name: 'third' },
+        ];
+        const result = deduplicateTerminalsByCwd(terminals);
+        expect(result).toHaveLength(1);
+        expect(result[0].name).toBe('first');
     });
 });
 
