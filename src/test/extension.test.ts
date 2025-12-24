@@ -115,6 +115,13 @@ describe('isClaudeProcess', () => {
     it('should return false for node', () => {
         expect(isClaudeProcess('node')).toBe(false);
     });
+
+    it('should return false for claude-related but not exact matches', () => {
+        // These should NOT match - only exact "claude" or paths ending in /claude
+        expect(isClaudeProcess('claude-mcp')).toBe(false);
+        expect(isClaudeProcess('claude-helper')).toBe(false);
+        expect(isClaudeProcess('some-claude-thing')).toBe(false);
+    });
 });
 
 describe('parseProcessList', () => {

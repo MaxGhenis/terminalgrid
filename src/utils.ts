@@ -50,8 +50,9 @@ export function isBrowseOption(item: { label: string }): boolean {
  * @returns true if it's a Claude-related process
  */
 export function isClaudeProcess(processName: string): boolean {
-    const name = processName.toLowerCase();
-    return name.includes('claude');
+    const name = processName.toLowerCase().trim();
+    // Match exact "claude" or paths ending in /claude
+    return name === 'claude' || name.endsWith('/claude');
 }
 
 /**
