@@ -17,13 +17,20 @@ interface TerminalState {
     gracefulExit: boolean;
 }
 
+// Shell integration cwd access type (for terminals with shell integration enabled)
+interface ShellIntegrationCwd {
+    shellIntegration?: {
+        cwd?: vscode.Uri | string;
+    };
+}
+
 const TERMINAL_STATE_KEY = 'terminalGridState';
 const SAVE_INTERVAL_MS = 5000; // Save every 5 seconds
 const ICON_UPDATE_INTERVAL_MS = 3000; // Update icons every 3 seconds
 
 let saveInterval: NodeJS.Timeout | undefined;
 let iconUpdateInterval: NodeJS.Timeout | undefined;
-let terminalCwdMap: Map<string, string> = new Map();
+const terminalCwdMap: Map<string, string> = new Map();
 
 // Icons for terminal creation
 const TERMINAL_ICON = new vscode.ThemeIcon('terminal', new vscode.ThemeColor('terminal.ansiGreen'));
@@ -37,7 +44,9 @@ let statusBarItem: vscode.StatusBarItem | undefined;
 async function isTerminalRunningClaude(terminal: vscode.Terminal): Promise<boolean> {
     try {
         const pid = await terminal.processId;
-        if (!pid) return false;
+        if (!pid) {
+            return false;
+        }
 
         // Get child processes of this terminal's shell
         const { stdout } = await execAsync(
@@ -56,7 +65,9 @@ async function isTerminalRunningClaude(terminal: vscode.Terminal): Promise<boole
  * Update status bar with Claude terminal count
  */
 async function updateStatusBar() {
-    if (!statusBarItem) return;
+    if (!statusBarItem) {
+        return;
+    }
 
     let claudeCount = 0;
     let shellCount = 0;
@@ -159,7 +170,7 @@ async function configureTerminalSettings() {
 
 function getTerminalCwd(terminal: vscode.Terminal): string | undefined {
     // Try shell integration first (most reliable)
-    const shellIntegration = (terminal as any).shellIntegration;
+    const shellIntegration = (terminal as unknown as ShellIntegrationCwd).shellIntegration;
     if (shellIntegration?.cwd) {
         const cwdUri = shellIntegration.cwd;
         if (cwdUri instanceof vscode.Uri) {
@@ -356,7 +367,7 @@ function trackTerminalCwd(terminal: vscode.Terminal) {
     const key = getTerminalKey(terminal);
 
     // Try shell integration first (most reliable when shell is active)
-    const shellIntegration = (terminal as any).shellIntegration;
+    const shellIntegration = (terminal as unknown as ShellIntegrationCwd).shellIntegration;
     if (shellIntegration?.cwd) {
         const cwd = shellIntegration.cwd;
         const cwdPath = cwd instanceof vscode.Uri ? cwd.fsPath : String(cwd);
@@ -413,7 +424,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     // Try to restore terminals from crash
-    const restored = await restoreTerminals(context);
+    await restoreTerminals(context);
 
     // Start periodic state saving
     startPeriodicSave(context);
