@@ -45,6 +45,10 @@
       {
         "command": "terminalgrid.refreshTerminals",
         "title": "TerminalGrid: Refresh Terminals (rename by folder)"
+      },
+      {
+        "command": "terminalgrid.showTerminalStatus",
+        "title": "TerminalGrid: Show Terminal Status"
       }
     ],
     "keybindings": [

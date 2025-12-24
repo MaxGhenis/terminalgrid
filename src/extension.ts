@@ -61,6 +61,15 @@ async function isTerminalRunningClaude(terminal: vscode.Terminal): Promise<boole
     }
 }
 
+// Track terminal status for quick display
+interface TerminalStatus {
+    terminal: vscode.Terminal;
+    name: string;
+    isRunningClaude: boolean;
+}
+
+let lastTerminalStatuses: TerminalStatus[] = [];
+
 /**
  * Update status bar with Claude terminal count
  */
@@ -71,23 +80,49 @@ async function updateStatusBar() {
 
     let claudeCount = 0;
     let shellCount = 0;
+    const statuses: TerminalStatus[] = [];
 
     for (const terminal of vscode.window.terminals) {
         try {
             const isRunningClaude = await isTerminalRunningClaude(terminal);
+            statuses.push({
+                terminal,
+                name: terminal.name,
+                isRunningClaude
+            });
             if (isRunningClaude) {
                 claudeCount++;
             } else {
                 shellCount++;
             }
         } catch {
+            statuses.push({
+                terminal,
+                name: terminal.name,
+                isRunningClaude: false
+            });
             shellCount++;
         }
     }
 
+    lastTerminalStatuses = statuses;
+
     if (claudeCount > 0 || shellCount > 0) {
         statusBarItem.text = `$(terminal) ${claudeCount > 0 ? `🟡${claudeCount}` : ''}${shellCount > 0 ? ` 🟢${shellCount}` : ''}`;
-        statusBarItem.tooltip = `Claude: ${claudeCount} | Shell: ${shellCount}`;
+        // Build tooltip showing which terminals are which
+        const claudeTerminals = statuses.filter(s => s.isRunningClaude).map(s => s.name);
+        const shellTerminals = statuses.filter(s => !s.isRunningClaude).map(s => s.name);
+        let tooltip = '';
+        if (claudeTerminals.length > 0) {
+            tooltip += `🟡 Claude: ${claudeTerminals.join(', ')}`;
+        }
+        if (shellTerminals.length > 0) {
+            if (tooltip) { tooltip += '\n'; }
+            tooltip += `🟢 Shell: ${shellTerminals.join(', ')}`;
+        }
+        tooltip += '\n\nClick to show terminal list';
+        statusBarItem.tooltip = tooltip;
+        statusBarItem.command = 'terminalgrid.showTerminalStatus';
         statusBarItem.show();
     } else {
         statusBarItem.hide();
@@ -170,24 +205,96 @@ async function configureTerminalSettings() {
 
 async function getProcessCwd(pid: number): Promise<string | undefined> {
     try {
-        // On macOS/Linux, we can read the process's cwd
         const platform = os.platform();
+        console.log(`TerminalGrid: getProcessCwd called for PID ${pid} on ${platform}`);
+
         if (platform === 'darwin') {
-            // lsof output: fcwd on one line, then n/path on next line
-            const { stdout } = await execAsync(`lsof -p ${pid} -Fn 2>/dev/null | grep -A1 '^fcwd' | grep '^n' | cut -c2-`);
-            const cwd = stdout.trim();
-            if (cwd && cwd.length > 0) {
-                return cwd;
+            // First check the process itself (VS Code might return shell PID directly)
+            let cmd = `lsof -p ${pid} -Fn 2>/dev/null | grep -A1 '^fcwd' | grep '^n' | cut -c2-`;
+            try {
+                const { stdout } = await execAsync(cmd);
+                const cwd = stdout.trim();
+                console.log(`TerminalGrid: PID ${pid} direct cwd: "${cwd}"`);
+                if (cwd && cwd.length > 0 && cwd !== os.homedir() && cwd !== '/') {
+                    return cwd;
+                }
+            } catch {
+                console.log(`TerminalGrid: Failed to get cwd for PID ${pid}`);
+            }
+
+            // Find child shell processes (the actual shell running in the terminal)
+            const { stdout: childPids } = await execAsync(`pgrep -P ${pid} 2>/dev/null || echo ""`);
+            const children = childPids.trim().split('\n').filter(p => p.trim());
+            console.log(`TerminalGrid: Child PIDs of ${pid}: [${children.join(', ')}]`);
+
+            // Check each child process for its cwd
+            for (const childPid of children) {
+                cmd = `lsof -p ${childPid} -Fn 2>/dev/null | grep -A1 '^fcwd' | grep '^n' | cut -c2-`;
+                try {
+                    const { stdout } = await execAsync(cmd);
+                    const cwd = stdout.trim();
+                    console.log(`TerminalGrid: Child ${childPid} cwd: "${cwd}"`);
+                    if (cwd && cwd.length > 0 && cwd !== os.homedir() && cwd !== '/') {
+                        return cwd;
+                    }
+                } catch {
+                    // Continue to next child
+                }
+
+                // Also check grandchildren (shell might spawn subprocesses)
+                const { stdout: grandchildPids } = await execAsync(`pgrep -P ${childPid} 2>/dev/null || echo ""`);
+                const grandchildren = grandchildPids.trim().split('\n').filter(p => p.trim());
+                for (const gcPid of grandchildren) {
+                    cmd = `lsof -p ${gcPid} -Fn 2>/dev/null | grep -A1 '^fcwd' | grep '^n' | cut -c2-`;
+                    try {
+                        const { stdout } = await execAsync(cmd);
+                        const cwd = stdout.trim();
+                        console.log(`TerminalGrid: Grandchild ${gcPid} cwd: "${cwd}"`);
+                        if (cwd && cwd.length > 0 && cwd !== os.homedir() && cwd !== '/') {
+                            return cwd;
+                        }
+                    } catch {
+                        // Continue
+                    }
+                }
+            }
+
+            // Last resort: return home dir cwd if that's all we have
+            cmd = `lsof -p ${pid} -Fn 2>/dev/null | grep -A1 '^fcwd' | grep '^n' | cut -c2-`;
+            try {
+                const { stdout } = await execAsync(cmd);
+                const cwd = stdout.trim();
+                if (cwd && cwd.length > 0) {
+                    return cwd;
+                }
+            } catch {
+                // Fall through
             }
         } else if (platform === 'linux') {
+            // Similar approach for Linux
+            const { stdout: childPids } = await execAsync(`pgrep -P ${pid} 2>/dev/null || echo ""`);
+            const children = childPids.trim().split('\n').filter(p => p.trim());
+
+            for (const childPid of children.reverse()) {
+                try {
+                    const { stdout } = await execAsync(`readlink -f /proc/${childPid}/cwd 2>/dev/null`);
+                    const cwd = stdout.trim();
+                    if (cwd && cwd.length > 0 && cwd !== os.homedir()) {
+                        return cwd;
+                    }
+                } catch {
+                    // Continue
+                }
+            }
+
             const { stdout } = await execAsync(`readlink -f /proc/${pid}/cwd 2>/dev/null`);
             const cwd = stdout.trim();
             if (cwd && cwd.length > 0) {
                 return cwd;
             }
         }
-    } catch {
-        // Silently fail - process may have exited or we don't have permission
+    } catch (error) {
+        console.log(`TerminalGrid: getProcessCwd error for PID ${pid}:`, error);
     }
     return undefined;
 }
@@ -625,6 +732,34 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    // Register show terminal status command - shows which terminals are running Claude
+    context.subscriptions.push(
+        vscode.commands.registerCommand('terminalgrid.showTerminalStatus', async () => {
+            // Force a refresh to get current status
+            await updateStatusBar();
+
+            if (lastTerminalStatuses.length === 0) {
+                vscode.window.showInformationMessage('No terminals open');
+                return;
+            }
+
+            const items = lastTerminalStatuses.map(status => ({
+                label: `${status.isRunningClaude ? '🟡' : '🟢'} ${status.name}`,
+                description: status.isRunningClaude ? 'Claude running' : 'Shell',
+                terminal: status.terminal
+            }));
+
+            const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: 'Select terminal to focus',
+                title: 'Terminal Status'
+            });
+
+            if (selected) {
+                selected.terminal.show();
+            }
+        })
+    );
+
     // Register refresh terminals command - recreates terminals with proper names
     context.subscriptions.push(
         vscode.commands.registerCommand('terminalgrid.refreshTerminals', async () => {
@@ -633,6 +768,8 @@ export async function activate(context: vscode.ExtensionContext) {
             const autoLaunchCommand = config.get<string>('autoLaunchCommand', '').trim();
 
             const terminals = [...vscode.window.terminals];
+            console.log(`TerminalGrid Refresh: Found ${terminals.length} terminals`);
+
             if (terminals.length === 0) {
                 vscode.window.showInformationMessage('No terminals to refresh');
                 return;
@@ -641,10 +778,18 @@ export async function activate(context: vscode.ExtensionContext) {
             // Collect terminal info before disposing
             const terminalInfos: { cwd: string; name: string }[] = [];
             for (const terminal of terminals) {
+                const pid = await terminal.processId;
+                console.log(`TerminalGrid Refresh: Terminal "${terminal.name}" has PID: ${pid}`);
+
                 const cwd = await getTerminalCwd(terminal);
+                console.log(`TerminalGrid Refresh: Terminal "${terminal.name}" cwd: ${cwd}`);
+
                 if (cwd) {
                     const newName = autoNameByFolder ? getFolderName(cwd) : terminal.name;
                     terminalInfos.push({ cwd, name: newName });
+                    console.log(`TerminalGrid Refresh: Will recreate "${terminal.name}" as "${newName}" in ${cwd}`);
+                } else {
+                    console.log(`TerminalGrid Refresh: Skipping "${terminal.name}" - no cwd found`);
                 }
             }
 
