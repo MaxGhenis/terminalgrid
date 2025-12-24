@@ -375,15 +375,28 @@ function trackTerminalCwd(terminal: vscode.Terminal) {
         return;
     }
 
-    // Fall back to workspace folder
+    // Try to match terminal name to a workspace folder
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders && workspaceFolders.length > 0) {
+        // Check if terminal name matches any workspace folder name
+        const terminalName = terminal.name.toLowerCase();
+        for (const folder of workspaceFolders) {
+            const folderName = getFolderName(folder.uri.fsPath).toLowerCase();
+            if (terminalName.includes(folderName) || folderName.includes(terminalName)) {
+                terminalCwdMap.set(key, folder.uri.fsPath);
+                console.log(`TerminalGrid: Tracked cwd via name match: ${folder.uri.fsPath} (terminal: ${terminal.name})`);
+                return;
+            }
+        }
+
+        // Fall back to first workspace folder
         const cwdPath = workspaceFolders[0].uri.fsPath;
-        // Only set if we don't already have a cwd for this terminal
         if (!terminalCwdMap.has(key)) {
             terminalCwdMap.set(key, cwdPath);
-            console.log(`TerminalGrid: Tracked cwd via workspace folder: ${cwdPath}`);
+            console.log(`TerminalGrid: Tracked cwd via workspace folder fallback: ${cwdPath}`);
         }
+    } else {
+        console.log(`TerminalGrid: No cwd found for terminal "${terminal.name}" (no workspace folders)`);
     }
 }
 
@@ -428,6 +441,12 @@ export async function activate(context: vscode.ExtensionContext) {
             setTimeout(() => trackTerminalCwd(terminal), 1000);
         })
     );
+
+    // Track ALL existing terminals at startup (important for crash recovery)
+    console.log(`TerminalGrid: Tracking ${vscode.window.terminals.length} existing terminals at startup`);
+    for (const terminal of vscode.window.terminals) {
+        trackTerminalCwd(terminal);
+    }
 
     // Track when terminals are closed
     context.subscriptions.push(
