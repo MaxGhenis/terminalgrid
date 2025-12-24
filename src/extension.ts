@@ -173,7 +173,8 @@ async function getProcessCwd(pid: number): Promise<string | undefined> {
         // On macOS/Linux, we can read the process's cwd
         const platform = os.platform();
         if (platform === 'darwin') {
-            const { stdout } = await execAsync(`lsof -p ${pid} -Fn 2>/dev/null | grep '^ncwd' | cut -c5-`);
+            // lsof output: fcwd on one line, then n/path on next line
+            const { stdout } = await execAsync(`lsof -p ${pid} -Fn 2>/dev/null | grep -A1 '^fcwd' | grep '^n' | cut -c2-`);
             const cwd = stdout.trim();
             if (cwd && cwd.length > 0) {
                 return cwd;
