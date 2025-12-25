@@ -103,27 +103,40 @@ async function getClaudeStatus(terminal: vscode.Terminal): Promise<ClaudeStatus>
         const claudeChildren = getChildPids(claudePid);
         const childProcesses = claudeChildren.map(c => c.comm);
 
-        // Filter out persistent/background processes that don't indicate active work
-        const backgroundProcesses = ['node', 'npx', 'npm', 'mcp', 'uvx', 'uv', 'python', 'python3', 'claude'];
+        // Look for processes that indicate active tool use
+        // MCP servers run as node/python, so we need to look for shell/tool processes
         const activeChildren = childProcesses.filter(proc => {
             const name = proc.toLowerCase();
-            // Exclude known background processes first (including nested claude binary)
-            if (backgroundProcesses.some(bg => name.includes(bg))) {
+
+            // Shell processes indicate active command execution
+            if (name.includes('bash') || name.includes('zsh') || name === 'sh' || name === '-zsh' || name === '-bash') {
+                return true;
+            }
+            // Common CLI tools indicate active work
+            if (name.includes('git') || name.includes('grep') || name.includes('find') || name.includes('rg')) {
+                return true;
+            }
+            if (name.includes('cat') || name.includes('ls') || name.includes('rm') || name.includes('mv') || name.includes('cp')) {
+                return true;
+            }
+            if (name.includes('curl') || name.includes('wget') || name.includes('ssh')) {
+                return true;
+            }
+            // Exclude known background/MCP processes
+            if (name.includes('node') || name.includes('npm') || name.includes('npx')) {
                 return false;
             }
-            // These indicate active tool use
-            if (name.includes('bash') || name.includes('zsh')) {
-                return true;
+            if (name.includes('python') || name.includes('uvx') || name.includes('mcp')) {
+                return false;
             }
-            if (name.includes('git') || name.includes('grep') || name.includes('find')) {
-                return true;
-            }
-            if (name.includes('cat') || name.includes('ls') || name.includes('rm')) {
-                return true;
+            if (name.includes('claude')) {
+                return false;
             }
             // Unknown process - could be active tool, count it
             return true;
         });
+
+        console.log(`TerminalGrid Status: Claude PID ${claudePid} children: [${childProcesses.join(', ')}], active: [${activeChildren.join(', ')}]`);
 
         return { hasClaude: true, isActive: activeChildren.length > 0 };
     } catch {
@@ -579,8 +592,10 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         console.log(`TerminalGrid: Creating ${uniqueTerminals.length} terminals with saved cwds/names`);
 
         for (const savedTerminal of uniqueTerminals) {
-            const terminalName = savedTerminal.name ||
-                (autoNameByFolder ? getFolderName(savedTerminal.cwd) : undefined);
+            // Prefer folder name when autoNameByFolder is enabled, fall back to saved name
+            const terminalName = autoNameByFolder
+                ? getFolderName(savedTerminal.cwd)
+                : (savedTerminal.name || getFolderName(savedTerminal.cwd));
 
             const terminalOptions: vscode.TerminalOptions = {
                 cwd: savedTerminal.cwd,
@@ -612,9 +627,10 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
     console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals from crash`);
 
     for (const savedTerminal of uniqueTerminals) {
-        // Use saved name, or auto-generate from folder if enabled
-        const terminalName = savedTerminal.name ||
-            (autoNameByFolder ? getFolderName(savedTerminal.cwd) : undefined);
+        // Prefer folder name when autoNameByFolder is enabled, fall back to saved name
+        const terminalName = autoNameByFolder
+            ? getFolderName(savedTerminal.cwd)
+            : (savedTerminal.name || getFolderName(savedTerminal.cwd));
 
         const terminalOptions: vscode.TerminalOptions = {
             cwd: savedTerminal.cwd,
