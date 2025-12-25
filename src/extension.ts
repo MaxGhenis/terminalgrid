@@ -25,12 +25,34 @@ interface ShellIntegrationCwd {
 }
 
 const TERMINAL_STATE_KEY = 'terminalGridState';
+const CWD_MAP_KEY = 'terminalCwdMap';  // Persist CWD map across restarts
 const SAVE_INTERVAL_MS = 5000; // Save every 5 seconds
 const ICON_UPDATE_INTERVAL_MS = 3000; // Update icons every 3 seconds
 
 let saveInterval: NodeJS.Timeout | undefined;
 let iconUpdateInterval: NodeJS.Timeout | undefined;
 const terminalCwdMap: Map<string, string> = new Map();
+
+// Load CWD map from persistent storage
+function loadCwdMap(context: vscode.ExtensionContext) {
+    const savedMap = context.globalState.get<Record<string, string>>(CWD_MAP_KEY);
+    if (savedMap) {
+        for (const [key, value] of Object.entries(savedMap)) {
+            terminalCwdMap.set(key, value);
+        }
+        console.log(`TerminalGrid: Loaded ${terminalCwdMap.size} CWD entries from storage`);
+    }
+}
+
+// Save CWD map to persistent storage
+function saveCwdMap(context: vscode.ExtensionContext) {
+    const mapObj: Record<string, string> = {};
+    for (const [key, value] of terminalCwdMap.entries()) {
+        mapObj[key] = value;
+    }
+    context.globalState.update(CWD_MAP_KEY, mapObj);
+    console.log(`TerminalGrid: Saved ${terminalCwdMap.size} CWD entries to storage`);
+}
 
 // Icons for terminal creation
 const TERMINAL_ICON = new vscode.ThemeIcon('terminal', new vscode.ThemeColor('terminal.ansiGreen'));
@@ -637,6 +659,8 @@ function startPeriodicSave(context: vscode.ExtensionContext) {
             await trackTerminalCwd(terminal);
         }
         saveTerminalState(context);
+        // Also persist the CWD map
+        saveCwdMap(context);
     }, SAVE_INTERVAL_MS);
 }
 
@@ -771,6 +795,9 @@ async function deduplicateExistingTerminals() {
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log('TerminalGrid is now active');
+
+    // Load persisted CWD map FIRST (before any terminal operations)
+    loadCwdMap(context);
 
     // Check if this is first activation
     const hasConfigured = context.globalState.get('hasConfigured', false);
