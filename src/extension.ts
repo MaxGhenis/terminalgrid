@@ -53,21 +53,22 @@ async function getClaudeStatus(terminal: vscode.Terminal): Promise<ClaudeStatus>
             return { hasClaude: false, isActive: false };
         }
 
-        // Get child processes of this terminal's shell
-        const { stdout } = await execAsync(
-            `pgrep -P ${pid} | xargs -I{} ps -o pid=,comm= -p {} 2>/dev/null || true`
-        );
+        // Get all process info (ps is more reliable than pgrep -P on macOS)
+        const { stdout: psOutput } = await execAsync(`ps -eo pid,ppid,comm 2>/dev/null || echo ""`);
+        const getChildPids = (parentPid: number): Array<{pid: number, comm: string}> => {
+            return psOutput.trim().split('\n')
+                .map(line => line.trim().split(/\s+/))
+                .filter(parts => parts.length >= 3 && parseInt(parts[1], 10) === parentPid)
+                .map(parts => ({ pid: parseInt(parts[0], 10), comm: parts.slice(2).join(' ') }));
+        };
 
-        // Find Claude process
-        const lines = stdout.trim().split('\n').filter(p => p.trim());
+        // Find Claude process among children
+        const children = getChildPids(pid);
         let claudePid: number | null = null;
 
-        for (const line of lines) {
-            const parts = line.trim().split(/\s+/);
-            const childPid = parseInt(parts[0], 10);
-            const comm = parts.slice(1).join(' ');
-            if (isClaudeProcess(comm)) {
-                claudePid = childPid;
+        for (const child of children) {
+            if (isClaudeProcess(child.comm)) {
+                claudePid = child.pid;
                 break;
             }
         }
@@ -77,12 +78,8 @@ async function getClaudeStatus(terminal: vscode.Terminal): Promise<ClaudeStatus>
         }
 
         // Check if Claude has active tool processes (not just MCP servers)
-        // Get child process names, not just count
-        const { stdout: claudeChildInfo } = await execAsync(
-            `pgrep -P ${claudePid} 2>/dev/null | xargs -I{} ps -o comm= -p {} 2>/dev/null || echo ""`
-        );
-
-        const childProcesses = claudeChildInfo.trim().split('\n').filter(p => p.trim());
+        const claudeChildren = getChildPids(claudePid);
+        const childProcesses = claudeChildren.map(c => c.comm);
 
         // Filter out persistent/background processes that don't indicate active work
         const backgroundProcesses = ['node', 'npx', 'npm', 'mcp', 'uvx', 'uv', 'python', 'python3', 'claude'];
@@ -299,9 +296,16 @@ async function getProcessCwd(pid: number): Promise<string | undefined> {
                 console.log(`TerminalGrid: Failed to get cwd for PID ${pid}`);
             }
 
-            // Find child shell processes (the actual shell running in the terminal)
-            const { stdout: childPids } = await execAsync(`pgrep -P ${pid} 2>/dev/null || echo ""`);
-            const children = childPids.trim().split('\n').filter(p => p.trim());
+            // Find child shell processes using ps (more reliable than pgrep -P on macOS)
+            const { stdout: psOutput } = await execAsync(`ps -eo pid,ppid 2>/dev/null || echo ""`);
+            const getChildPids = (parentPid: number): string[] => {
+                return psOutput.trim().split('\n')
+                    .map(line => line.trim().split(/\s+/))
+                    .filter(parts => parts.length >= 2 && parseInt(parts[1], 10) === parentPid)
+                    .map(parts => parts[0]);
+            };
+
+            const children = getChildPids(pid);
             console.log(`TerminalGrid: Child PIDs of ${pid}: [${children.join(', ')}]`);
 
             // Check each child process for its cwd
@@ -319,8 +323,7 @@ async function getProcessCwd(pid: number): Promise<string | undefined> {
                 }
 
                 // Also check grandchildren (shell might spawn subprocesses)
-                const { stdout: grandchildPids } = await execAsync(`pgrep -P ${childPid} 2>/dev/null || echo ""`);
-                const grandchildren = grandchildPids.trim().split('\n').filter(p => p.trim());
+                const grandchildren = getChildPids(parseInt(childPid, 10));
                 for (const gcPid of grandchildren) {
                     cmd = `lsof -p ${gcPid} -Fn 2>/dev/null | grep -A1 '^fcwd' | grep '^n' | cut -c2-`;
                     try {
