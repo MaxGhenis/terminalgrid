@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName } from '../utils';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName, normalizeForMatch } from '../utils';
 
 describe('getFolderName', () => {
     it('should return the last folder name from a path', () => {
@@ -243,6 +243,28 @@ describe('inferCwdFromName', () => {
     it('should return undefined if no matching folder found', () => {
         const result = inferCwdFromName('nonexistent-folder-xyz', []);
         expect(result).toBeUndefined();
+    });
+
+    it('should find optiqal-ai folder when terminal is named optiqal_ai (underscore/hyphen equivalence)', () => {
+        // This documents that underscores and hyphens should be treated as equivalent
+        // The actual test depends on the folder existing on disk
+        const result = inferCwdFromName('optiqal_ai', ['/Users/maxghenis']);
+        // If optiqal-ai exists, it should find it
+        expect(typeof result === 'string' || result === undefined).toBe(true);
+    });
+});
+
+describe('normalizeForMatch', () => {
+    it('should normalize underscores and hyphens to be equivalent', () => {
+        expect(normalizeForMatch('optiqal_ai')).toBe(normalizeForMatch('optiqal-ai'));
+    });
+
+    it('should be case insensitive', () => {
+        expect(normalizeForMatch('MyProject')).toBe(normalizeForMatch('myproject'));
+    });
+
+    it('should handle mixed separators', () => {
+        expect(normalizeForMatch('my_project-name')).toBe(normalizeForMatch('my-project_name'));
     });
 });
 

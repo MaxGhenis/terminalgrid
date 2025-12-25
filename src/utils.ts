@@ -108,8 +108,17 @@ export function hasDuplicateCwds<T extends { cwd: string }>(terminals: T[]): boo
 }
 
 /**
+ * Normalize a name for fuzzy matching - lowercase and treat underscores/hyphens as equivalent
+ * @param name - Name to normalize
+ * @returns Normalized name for comparison
+ */
+export function normalizeForMatch(name: string): string {
+    return name.toLowerCase().trim().replace(/[-_]/g, '-');
+}
+
+/**
  * Try to infer CWD from terminal name by searching common paths
- * @param name - Terminal name (e.g., "marginal-child")
+ * @param name - Terminal name (e.g., "marginal-child" or "optiqal_ai")
  * @param searchPaths - Paths to search for matching folders
  * @returns Path if found, undefined otherwise
  */
@@ -124,8 +133,8 @@ export function inferCwdFromName(name: string, searchPaths: string[]): string | 
         return undefined;
     }
 
-    // Normalize name for matching
-    const normalizedName = name.toLowerCase().trim();
+    // Normalize name for matching (handles underscore/hyphen equivalence)
+    const normalizedName = normalizeForMatch(name);
 
     for (const searchPath of searchPaths) {
         try {
@@ -135,10 +144,10 @@ export function inferCwdFromName(name: string, searchPaths: string[]): string | 
                 return exactPath;
             }
 
-            // Check subdirectories for matching name
+            // Check subdirectories for matching name (with fuzzy underscore/hyphen matching)
             const entries = fs.readdirSync(searchPath, { withFileTypes: true });
             for (const entry of entries) {
-                if (entry.isDirectory() && entry.name.toLowerCase() === normalizedName) {
+                if (entry.isDirectory() && normalizeForMatch(entry.name) === normalizedName) {
                     return path.join(searchPath, entry.name);
                 }
             }
