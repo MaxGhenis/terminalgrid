@@ -631,21 +631,35 @@ function startPeriodicSave(context: vscode.ExtensionContext) {
         clearInterval(saveInterval);
     }
 
-    saveInterval = setInterval(() => {
+    saveInterval = setInterval(async () => {
+        // Refresh CWD tracking for all terminals before saving
+        for (const terminal of vscode.window.terminals) {
+            await trackTerminalCwd(terminal);
+        }
         saveTerminalState(context);
     }, SAVE_INTERVAL_MS);
 }
 
 async function trackTerminalCwd(terminal: vscode.Terminal) {
     const key = getTerminalKey(terminal);
+    const homeDir = os.homedir();
+    const existingCwd = terminalCwdMap.get(key);
+
+    // Helper to determine if a CWD is "valid" (not home dir or root)
+    const isValidCwd = (cwd: string | undefined): cwd is string => {
+        return !!cwd && cwd !== '/' && cwd !== homeDir;
+    };
 
     // Try shell integration first (most reliable when shell is active)
     const shellIntegration = (terminal as unknown as ShellIntegrationCwd).shellIntegration;
     if (shellIntegration?.cwd) {
         const cwd = shellIntegration.cwd;
         const cwdPath = cwd instanceof vscode.Uri ? cwd.fsPath : String(cwd);
-        terminalCwdMap.set(key, cwdPath);
-        console.log(`TerminalGrid: Tracked cwd via shell integration: ${cwdPath}`);
+        // Only update if new CWD is valid OR we have no existing valid CWD
+        if (isValidCwd(cwdPath) || !isValidCwd(existingCwd)) {
+            terminalCwdMap.set(key, cwdPath);
+            console.log(`TerminalGrid: Tracked cwd via shell integration: ${cwdPath}`);
+        }
         return;
     }
 
@@ -654,18 +668,24 @@ async function trackTerminalCwd(terminal: vscode.Terminal) {
     if (creationOptions?.cwd) {
         const cwd = creationOptions.cwd;
         const cwdPath = cwd instanceof vscode.Uri ? cwd.fsPath : String(cwd);
-        terminalCwdMap.set(key, cwdPath);
-        console.log(`TerminalGrid: Tracked cwd via creationOptions: ${cwdPath}`);
+        if (isValidCwd(cwdPath) || !isValidCwd(existingCwd)) {
+            terminalCwdMap.set(key, cwdPath);
+            console.log(`TerminalGrid: Tracked cwd via creationOptions: ${cwdPath}`);
+        }
         return;
     }
 
-    // Try to get cwd from the terminal's process (most reliable for VS Code-restored terminals)
+    // Try to get cwd from the terminal's process
     const pid = await terminal.processId;
     if (pid) {
         const processCwd = await getProcessCwd(pid);
-        if (processCwd) {
+        // Only update if detected CWD is valid, never overwrite valid CWD with invalid one
+        if (isValidCwd(processCwd)) {
             terminalCwdMap.set(key, processCwd);
             console.log(`TerminalGrid: Tracked cwd via process ${pid}: ${processCwd}`);
+            return;
+        } else if (isValidCwd(existingCwd)) {
+            console.log(`TerminalGrid: Keeping existing valid cwd ${existingCwd} (process returned ${processCwd})`);
             return;
         }
     }
