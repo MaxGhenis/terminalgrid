@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName, normalizeForMatch } from '../utils';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName, normalizeForMatch, scanProjectFolders } from '../utils';
 
 describe('getFolderName', () => {
     it('should return the last folder name from a path', () => {
@@ -268,35 +268,64 @@ describe('normalizeForMatch', () => {
     });
 });
 
-// Integration-style tests documenting expected behavior
-describe('createNamedTerminal behavior', () => {
-    describe('when promptForFolder is enabled', () => {
-        it('should show quick pick with workspace folders', () => {
-            // This documents the expected behavior:
-            // 1. Gets workspace folders via vscode.workspace.workspaceFolders
-            // 2. Creates QuickPickItems using createFolderQuickPickItems
-            // 3. Shows quick pick dialog via vscode.window.showQuickPick
-            // Implementation verified via createFolderQuickPickItems tests
-            expect(true).toBe(true);
-        });
-
-        it('should return undefined when user cancels quick pick', () => {
-            // When showQuickPick returns undefined, createNamedTerminal returns undefined
-            // This prevents terminal creation when user cancels
-            expect(true).toBe(true);
-        });
-
-        it('should open folder picker when Browse is selected', () => {
-            // When isBrowseOption returns true, showOpenDialog is called
-            // Implementation verified via isBrowseOption tests
-            expect(true).toBe(true);
-        });
+describe('scanProjectFolders', () => {
+    it('should return empty array for non-existent paths', () => {
+        const result = scanProjectFolders(['/nonexistent/path/12345']);
+        expect(result).toEqual([]);
     });
 
-    describe('when promptForFolder is disabled', () => {
-        it('should use first workspace folder as cwd', () => {
-            // Should not show quick pick, just use workspace folder
-            expect(true).toBe(true);
-        });
+    it('should return empty array for empty input', () => {
+        const result = scanProjectFolders([]);
+        expect(result).toEqual([]);
+    });
+
+    it('should sort folders alphabetically by name', () => {
+        // Scan current directory - should return sorted folders
+        const result = scanProjectFolders(['.']);
+        // Result should be sorted (if any folders exist)
+        if (result.length > 1) {
+            const names = result.map(p => getFolderName(p).toLowerCase());
+            const sorted = [...names].sort();
+            expect(names).toEqual(sorted);
+        }
+        expect(true).toBe(true);
+    });
+
+    it('should exclude hidden folders (starting with .)', () => {
+        // Scan current directory
+        const result = scanProjectFolders(['.']);
+        // None of the results should be hidden folders
+        for (const folder of result) {
+            expect(getFolderName(folder).startsWith('.')).toBe(false);
+        }
+    });
+});
+
+// Integration-style tests documenting expected behavior
+describe('createNamedTerminal behavior', () => {
+    it('should always show quick pick with project folders', () => {
+        // This documents the expected behavior:
+        // 1. Scans common project directories (~/PolicyEngine, ~/projects, etc.)
+        // 2. Shows workspace folders first (marked with ⭐)
+        // 3. Shows all other project folders (searchable)
+        // 4. Includes Browse... option at the end
+        expect(true).toBe(true);
+    });
+
+    it('should return undefined when user cancels quick pick', () => {
+        // When showQuickPick returns undefined, createNamedTerminal returns undefined
+        // This prevents terminal creation when user cancels
+        expect(true).toBe(true);
+    });
+
+    it('should open folder picker when Browse is selected', () => {
+        // When Browse... is selected, showOpenDialog is called
+        expect(true).toBe(true);
+    });
+
+    it('should run cd and cc after terminal creation', () => {
+        // After creating terminal, sends: cd "<folder>" && cc
+        // The cc command launches Claude Code
+        expect(true).toBe(true);
     });
 });

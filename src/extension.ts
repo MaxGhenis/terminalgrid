@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName } from './utils';
+import { getFolderName, isClaudeProcess, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName, scanProjectFolders } from './utils';
 
 const execAsync = promisify(exec);
 
@@ -897,75 +897,115 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     // Helper to create a new terminal with folder selection
-    const createNamedTerminal = async (skipFolderPrompt: boolean = false) => {
+    const createNamedTerminal = async () => {
         const config = vscode.workspace.getConfiguration('terminalgrid');
         const autoNameByFolder = config.get('autoNameByFolder', true);
-        const promptForFolder = config.get('promptForFolder', true);
+        const autoLaunchCommand = config.get<string>('autoLaunchCommand', '').trim();
+        const homeDir = os.homedir();
 
-        const options: vscode.TerminalOptions = {};
-        let selectedFolder: string | undefined;
+        // Scan common project directories for folders
+        const searchPaths = [
+            `${homeDir}/PolicyEngine`,
+            `${homeDir}/projects`,
+            `${homeDir}/code`,
+            `${homeDir}/dev`,
+            `${homeDir}/Documents`,
+            `${homeDir}/repos`,
+            `${homeDir}/src`,
+        ];
 
-        if (promptForFolder && !skipFolderPrompt) {
-            const workspaceFolders = vscode.workspace.workspaceFolders || [];
-            const homeDir = os.homedir();
+        // Add workspace folder parents to search paths
+        const workspaceFolders = vscode.workspace.workspaceFolders || [];
+        for (const folder of workspaceFolders) {
+            const parent = folder.uri.fsPath.split('/').slice(0, -1).join('/');
+            if (parent && !searchPaths.includes(parent)) {
+                searchPaths.push(parent);
+            }
+        }
 
-            // Use extracted utility to create quick pick items
-            const items = createFolderQuickPickItems(workspaceFolders);
+        // Get all project folders
+        const projectFolders = scanProjectFolders(searchPaths);
 
-            const selected = await vscode.window.showQuickPick(items, {
-                placeHolder: 'Select folder for new terminal',
-                title: 'TerminalGrid: New Terminal'
+        // Build quick pick items
+        const items: { label: string; description: string; detail?: string }[] = [];
+
+        // Add workspace folders first (marked as such)
+        for (const folder of workspaceFolders) {
+            items.push({
+                label: `$(folder) ${getFolderName(folder.uri.fsPath)}`,
+                description: folder.uri.fsPath,
+                detail: '⭐ Workspace folder'
+            });
+        }
+
+        // Add scanned project folders (excluding workspace folders)
+        const workspacePaths = new Set(workspaceFolders.map(f => f.uri.fsPath));
+        for (const folderPath of projectFolders) {
+            if (!workspacePaths.has(folderPath)) {
+                items.push({
+                    label: `$(folder) ${getFolderName(folderPath)}`,
+                    description: folderPath
+                });
+            }
+        }
+
+        // Add browse option at the end
+        items.push({
+            label: '$(folder-opened) Browse...',
+            description: 'Select a different folder',
+            detail: 'Open folder picker'
+        });
+
+        const selected = await vscode.window.showQuickPick(items, {
+            placeHolder: 'Type to search project folders...',
+            title: 'TerminalGrid: Select Project',
+            matchOnDescription: true
+        });
+
+        if (!selected) {
+            return undefined; // User cancelled
+        }
+
+        let selectedFolder: string;
+
+        if (selected.label.includes('Browse...')) {
+            // Open folder picker dialog
+            const folderUri = await vscode.window.showOpenDialog({
+                canSelectFiles: false,
+                canSelectFolders: true,
+                canSelectMany: false,
+                defaultUri: vscode.Uri.file(homeDir),
+                title: 'Select folder for terminal'
             });
 
-            if (!selected) {
+            if (!folderUri || folderUri.length === 0) {
                 return undefined; // User cancelled
             }
 
-            if (isBrowseOption(selected)) {
-                // Open folder picker dialog
-                const folderUri = await vscode.window.showOpenDialog({
-                    canSelectFiles: false,
-                    canSelectFolders: true,
-                    canSelectMany: false,
-                    defaultUri: vscode.Uri.file(homeDir),
-                    title: 'Select folder for terminal'
-                });
-
-                if (!folderUri || folderUri.length === 0) {
-                    return undefined; // User cancelled
-                }
-
-                selectedFolder = folderUri[0].fsPath;
-            } else {
-                selectedFolder = selected.description;
-            }
+            selectedFolder = folderUri[0].fsPath;
         } else {
-            // Use first workspace folder if available
-            const workspaceFolders = vscode.workspace.workspaceFolders;
-            if (workspaceFolders && workspaceFolders.length > 0) {
-                selectedFolder = workspaceFolders[0].uri.fsPath;
-            }
+            selectedFolder = selected.description!;
         }
 
-        if (selectedFolder) {
-            options.cwd = selectedFolder;
-            if (autoNameByFolder) {
-                options.name = getFolderName(selectedFolder);
-            }
-        }
+        // Create terminal with folder name
+        const terminalName = autoNameByFolder ? getFolderName(selectedFolder) : undefined;
+        const options: vscode.TerminalOptions = {
+            name: terminalName,
+            iconPath: TERMINAL_ICON
+        };
 
-        // Always set icon
-        options.iconPath = TERMINAL_ICON;
-
-        console.log(`TerminalGrid: Creating terminal "${options.name}" in ${options.cwd}`);
+        console.log(`TerminalGrid: Creating terminal "${terminalName}" for ${selectedFolder}`);
         const terminal = vscode.window.createTerminal(options);
         terminal.show();
 
-        // Immediately track the cwd so it's saved even if shell integration doesn't report it
-        if (selectedFolder) {
-            terminalCwdMap.set(getTerminalKey(terminal), selectedFolder);
-            console.log(`TerminalGrid: Tracked new terminal cwd: ${selectedFolder}`);
-        }
+        // Track the cwd
+        terminalCwdMap.set(getTerminalKey(terminal), selectedFolder);
+
+        // Run cd and launch command (default: cc for claude)
+        const launchCmd = autoLaunchCommand || 'cc';
+        setTimeout(() => {
+            terminal.sendText(`cd "${selectedFolder}" && ${launchCmd}`);
+        }, 300);
 
         return terminal;
     };

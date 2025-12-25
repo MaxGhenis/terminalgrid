@@ -117,6 +117,44 @@ export function normalizeForMatch(name: string): string {
 }
 
 /**
+ * Scan directories and return all subdirectories as project folders
+ * @param searchPaths - Parent directories to scan
+ * @returns Array of folder paths sorted alphabetically
+ */
+export function scanProjectFolders(searchPaths: string[]): string[] {
+    let fs: typeof import('fs');
+    let path: typeof import('path');
+    try {
+        fs = require('fs');
+        path = require('path');
+    } catch {
+        return [];
+    }
+
+    const folders: Set<string> = new Set();
+
+    for (const searchPath of searchPaths) {
+        try {
+            if (!fs.existsSync(searchPath)) {
+                continue;
+            }
+            const entries = fs.readdirSync(searchPath, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.isDirectory() && !entry.name.startsWith('.')) {
+                    folders.add(path.join(searchPath, entry.name));
+                }
+            }
+        } catch {
+            // Path doesn't exist or isn't readable, continue
+        }
+    }
+
+    return Array.from(folders).sort((a, b) =>
+        getFolderName(a).toLowerCase().localeCompare(getFolderName(b).toLowerCase())
+    );
+}
+
+/**
  * Try to infer CWD from terminal name by searching common paths
  * @param name - Terminal name (e.g., "marginal-child" or "optiqal_ai")
  * @param searchPaths - Paths to search for matching folders
