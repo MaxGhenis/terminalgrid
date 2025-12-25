@@ -901,18 +901,13 @@ export async function activate(context: vscode.ExtensionContext) {
         const config = vscode.workspace.getConfiguration('terminalgrid');
         const autoNameByFolder = config.get('autoNameByFolder', true);
         const autoLaunchCommand = config.get<string>('autoLaunchCommand', '').trim();
+        const projectDirectories = config.get<string[]>('projectDirectories', []);
         const homeDir = os.homedir();
 
-        // Scan common project directories for folders
-        const searchPaths = [
-            `${homeDir}/PolicyEngine`,
-            `${homeDir}/projects`,
-            `${homeDir}/code`,
-            `${homeDir}/dev`,
-            `${homeDir}/Documents`,
-            `${homeDir}/repos`,
-            `${homeDir}/src`,
-        ];
+        // Expand ~ in paths and build search paths from config
+        const searchPaths: string[] = projectDirectories.map(p =>
+            p.startsWith('~') ? p.replace('~', homeDir) : p
+        );
 
         // Add workspace folder parents to search paths
         const workspaceFolders = vscode.workspace.workspaceFolders || [];

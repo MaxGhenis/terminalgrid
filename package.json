@@ -114,10 +114,13 @@
           "default": true,
           "description": "Automatically name terminals based on their working directory folder name"
         },
-        "terminalgrid.promptForFolder": {
-          "type": "boolean",
-          "default": true,
-          "description": "Prompt for folder selection before opening a new terminal"
+        "terminalgrid.projectDirectories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Parent directories to scan for project folders. Subfolders of these directories will appear in the project picker.\n\n**Examples:**\n- `~/projects`\n- `~/code`\n- `~/Documents/GitHub`\n\nLeave empty to only show workspace folders and Browse option."
         }
       }
     }
