@@ -85,11 +85,15 @@ async function getClaudeStatus(terminal: vscode.Terminal): Promise<ClaudeStatus>
         const childProcesses = claudeChildInfo.trim().split('\n').filter(p => p.trim());
 
         // Filter out persistent/background processes that don't indicate active work
-        const backgroundProcesses = ['node', 'npx', 'npm', 'mcp', 'uvx', 'uv', 'python', 'python3'];
+        const backgroundProcesses = ['node', 'npx', 'npm', 'mcp', 'uvx', 'uv', 'python', 'python3', 'claude'];
         const activeChildren = childProcesses.filter(proc => {
             const name = proc.toLowerCase();
+            // Exclude known background processes first (including nested claude binary)
+            if (backgroundProcesses.some(bg => name.includes(bg))) {
+                return false;
+            }
             // These indicate active tool use
-            if (name.includes('bash') || name.includes('zsh') || name.includes('sh')) {
+            if (name.includes('bash') || name.includes('zsh')) {
                 return true;
             }
             if (name.includes('git') || name.includes('grep') || name.includes('find')) {
@@ -98,8 +102,8 @@ async function getClaudeStatus(terminal: vscode.Terminal): Promise<ClaudeStatus>
             if (name.includes('cat') || name.includes('ls') || name.includes('rm')) {
                 return true;
             }
-            // Exclude known background processes
-            return !backgroundProcesses.some(bg => name.includes(bg));
+            // Unknown process - could be active tool, count it
+            return true;
         });
 
         return { hasClaude: true, isActive: activeChildren.length > 0 };
