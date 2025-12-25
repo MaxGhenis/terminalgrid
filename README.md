@@ -8,10 +8,11 @@ Transform VS Code into a powerful terminal workspace with keyboard-driven grid m
 ## Features
 
 - **🎹 Keyboard-Driven Grid Management**: Create complex terminal layouts with simple shortcuts
+- **📁 Project Picker**: Searchable list of all your projects when opening terminals
 - **🚀 Optional Auto-Launch**: Run any command in every new terminal (AI tools, dev servers, etc.)
 - **🖼️ Image Support**: Paste screenshots directly into terminals (unlike native terminal grids)
-- **💾 Persistent Sessions**: Your terminal sessions persist across VS Code restarts
-- **⚙️ Simple Configuration**: One setting to rule them all
+- **💾 Crash Recovery**: Terminal directories persist even after VS Code crashes
+- **⚙️ Simple Configuration**: Configure your project directories once, pick projects instantly
 
 ## Why TerminalGrid?
 
@@ -31,10 +32,13 @@ Keyboard-driven terminal management is useful even without auto-launch. Quickly 
 
 | Shortcut | Action |
 |----------|--------|
-| `Cmd+K Cmd+Down` (Mac)<br>`Ctrl+K Ctrl+Down` (Win/Linux) | Split down and open terminal |
-| `Cmd+K Cmd+Right` (Mac)<br>`Ctrl+K Ctrl+Right` (Win/Linux) | Split right and open terminal |
-| `Cmd+K Cmd+N` (Mac)<br>`Ctrl+K Ctrl+N` (Win/Linux) | Open new terminal |
+| `Cmd+K Cmd+Down` (Mac)<br>`Ctrl+K Ctrl+Down` (Win/Linux) | Split down → pick project → launch |
+| `Cmd+K Cmd+Right` (Mac)<br>`Ctrl+K Ctrl+Right` (Win/Linux) | Split right → pick project → launch |
+| `Cmd+K Cmd+N` (Mac)<br>`Ctrl+K Ctrl+N` (Win/Linux) | New terminal → pick project → launch |
+| `Cmd+K Cmd+R` (Mac)<br>`Ctrl+K Ctrl+R` (Win/Linux) | Refresh terminal names by folder |
 | `Cmd+1/2/3/4` (Mac)<br>`Ctrl+1/2/3/4` (Win/Linux) | Jump to specific terminal pane |
+
+When you use any terminal shortcut, a **searchable project picker** appears. Type to filter, select a project, and the terminal opens with `cd <project> && <your-command>`.
 
 ## Installation
 
@@ -95,6 +99,22 @@ Command to run when opening a new terminal. Leave empty for plain terminals.
 - **[Aider](https://aider.chat)** - `aider` (open source)
 - **[OpenHands](https://github.com/All-Hands-AI/OpenHands)** - `openhands` (open source)
 
+### **`terminalgrid.projectDirectories`**
+
+Parent directories to scan for project folders. When you create a new terminal, you'll see a searchable list of all subfolders from these directories.
+
+```json
+{
+  "terminalgrid.projectDirectories": [
+    "~/projects",
+    "~/code",
+    "~/Documents/GitHub"
+  ]
+}
+```
+
+Supports `~` expansion. Workspace folder parents are always included automatically.
+
 ### Other Settings
 
 **`terminalgrid.enableTerminalsInEditor`**
@@ -106,56 +126,64 @@ Restore terminal sessions across restarts (default: `true`)
 **`terminalgrid.autoConfigureOnInstall`**
 Auto-configure settings on first install (default: `true`)
 
+**`terminalgrid.autoNameByFolder`**
+Automatically name terminals based on their working directory (default: `true`)
+
 ## Quick Setup
 
 1. **Open Settings** (`Cmd+,` / `Ctrl+,`)
 2. **Search** for "TerminalGrid"
-3. **Set** `Auto Launch Command` to your preferred tool (or leave empty)
-4. **Done!** Use the keyboard shortcuts to build your grid
+3. **Set** `Project Directories` to your project parent folders (e.g., `~/projects`, `~/code`)
+4. **Set** `Auto Launch Command` to your preferred tool (e.g., `claude`) or leave empty
+5. **Done!** Use `Cmd+K Cmd+N` to pick a project and start working
 
 ## Example Workflow: Claude Code Superterminal
 
 ```
 ┌─────────────────┬─────────────────┐
-│  Claude Code    │  Claude Code    │
-│  (Policy work)  │  (PR review)    │
+│  policyengine   │  api-server     │
+│  (Claude Code)  │  (Claude Code)  │
 ├─────────────────┼─────────────────┤
-│  Claude Code    │  Claude Code    │
-│  (Grant draft)  │  (Email/admin)  │
+│  docs           │  frontend       │
+│  (Claude Code)  │  (Claude Code)  │
 └─────────────────┴─────────────────┘
 ```
 
 **Setup:**
 ```json
 {
-  "terminalgrid.autoLaunchCommand": "claude --dangerously-skip-permissions"
+  "terminalgrid.projectDirectories": ["~/projects"],
+  "terminalgrid.autoLaunchCommand": "claude"
 }
 ```
 
 **Usage:**
-1. `Cmd+K Cmd+Right` → Claude Code starts in right pane
-2. `Cmd+K Cmd+Down` in left pane → Claude Code starts below
-3. `Cmd+K Cmd+Down` in right pane → Claude Code starts below
-4. **2x2 grid of Claude Code sessions ready!**
+1. `Cmd+K Cmd+N` → Pick "policyengine" → Claude launches
+2. `Cmd+K Cmd+Right` → Pick "api-server" → Claude launches in right pane
+3. `Cmd+K Cmd+Down` in left → Pick "docs" → Claude launches below
+4. `Cmd+K Cmd+Down` in right → Pick "frontend" → Claude launches below
+5. **2x2 grid with each Claude in a different project!**
 
 ## Example Workflow: Development (No Auto-Launch)
 
 ```
 ┌─────────────────┬─────────────────┐
-│  npm run dev    │  git status     │
+│  web-app        │  api            │
+│  (npm run dev)  │  (flask run)    │
 ├─────────────────┼─────────────────┤
-│  pytest         │  python shell   │
+│  tests          │  logs           │
+│  (pytest -w)    │  (tail -f)      │
 └─────────────────┴─────────────────┘
 ```
 
 **Setup:**
 ```json
 {
-  "terminalgrid.autoLaunchCommand": ""
+  "terminalgrid.projectDirectories": ["~/code"]
 }
 ```
 
-Use `Cmd+K Cmd+Down/Right/N` to quickly create your grid!
+Use `Cmd+K Cmd+Down/Right/N` → pick your project → run your commands!
 
 ## Requirements
 
