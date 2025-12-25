@@ -896,7 +896,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const terminal = await createNamedTerminal();
             if (!terminal) {
                 // User cancelled - close the empty editor group
-                await vscode.commands.executeCommand('workbench.action.closeEditorsInGroup');
+                await vscode.commands.executeCommand('workbench.action.closeGroup');
             }
         })
     );
@@ -908,7 +908,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const terminal = await createNamedTerminal();
             if (!terminal) {
                 // User cancelled - close the empty editor group
-                await vscode.commands.executeCommand('workbench.action.closeEditorsInGroup');
+                await vscode.commands.executeCommand('workbench.action.closeGroup');
             }
         })
     );
@@ -978,20 +978,48 @@ export async function activate(context: vscode.ExtensionContext) {
 
             // Collect terminal info before disposing
             const terminalInfos: { cwd: string; name: string }[] = [];
+            const homeDir = os.homedir();
+
+            // Build search paths for name inference
+            const searchPaths = [
+                homeDir,
+                `${homeDir}/PolicyEngine`,
+                `${homeDir}/projects`,
+                `${homeDir}/code`,
+                `${homeDir}/dev`,
+            ];
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (workspaceFolders) {
+                for (const folder of workspaceFolders) {
+                    searchPaths.push(folder.uri.fsPath);
+                    const parent = folder.uri.fsPath.split('/').slice(0, -1).join('/');
+                    if (parent && !searchPaths.includes(parent)) {
+                        searchPaths.push(parent);
+                    }
+                }
+            }
+
             for (const terminal of terminals) {
                 const pid = await terminal.processId;
                 console.log(`TerminalGrid Refresh: Terminal "${terminal.name}" has PID: ${pid}`);
 
-                const cwd = await getTerminalCwd(terminal);
-                console.log(`TerminalGrid Refresh: Terminal "${terminal.name}" cwd: ${cwd}`);
+                let cwd = await getTerminalCwd(terminal);
+                console.log(`TerminalGrid Refresh: Terminal "${terminal.name}" detected cwd: ${cwd}`);
 
-                if (cwd) {
-                    const newName = autoNameByFolder ? getFolderName(cwd) : terminal.name;
-                    terminalInfos.push({ cwd, name: newName });
-                    console.log(`TerminalGrid Refresh: Will recreate "${terminal.name}" as "${newName}" in ${cwd}`);
-                } else {
-                    console.log(`TerminalGrid Refresh: Skipping "${terminal.name}" - no cwd found`);
+                // If CWD detection failed, try to infer from terminal name
+                if (!cwd || cwd === '/' || cwd === homeDir) {
+                    const inferredCwd = inferCwdFromName(terminal.name, searchPaths);
+                    if (inferredCwd) {
+                        cwd = inferredCwd;
+                        console.log(`TerminalGrid Refresh: Inferred cwd from name "${terminal.name}": ${cwd}`);
+                    }
                 }
+
+                // Always preserve terminals - use home dir as last resort
+                const finalCwd = cwd || homeDir;
+                const newName = autoNameByFolder ? getFolderName(finalCwd) : terminal.name;
+                terminalInfos.push({ cwd: finalCwd, name: newName });
+                console.log(`TerminalGrid Refresh: Will recreate "${terminal.name}" as "${newName}" in ${finalCwd}`);
             }
 
             // Dispose old terminals
