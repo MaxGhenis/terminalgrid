@@ -676,6 +676,12 @@ async function trackTerminalCwd(terminal: vscode.Terminal) {
 
     // Try shell integration first (most reliable when shell is active)
     const shellIntegration = (terminal as unknown as ShellIntegrationCwd).shellIntegration;
+    console.log(`TerminalGrid: Terminal "${terminal.name}" shell integration:`, {
+        hasShellIntegration: !!shellIntegration,
+        hasCwd: !!shellIntegration?.cwd,
+        cwdValue: shellIntegration?.cwd?.toString(),
+        existingCwd
+    });
     if (shellIntegration?.cwd) {
         const cwd = shellIntegration.cwd;
         const cwdPath = cwd instanceof vscode.Uri ? cwd.fsPath : String(cwd);
@@ -683,6 +689,8 @@ async function trackTerminalCwd(terminal: vscode.Terminal) {
         if (isValidCwd(cwdPath) || !isValidCwd(existingCwd)) {
             terminalCwdMap.set(key, cwdPath);
             console.log(`TerminalGrid: Tracked cwd via shell integration: ${cwdPath}`);
+        } else {
+            console.log(`TerminalGrid: Keeping existing cwd ${existingCwd} (shell integration returned ${cwdPath})`);
         }
         return;
     }
@@ -827,6 +835,16 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.window.onDidChangeTerminalShellIntegration((e) => {
             trackTerminalCwd(e.terminal);
+        })
+    );
+
+    // Track CWD after shell commands complete (catches cd commands)
+    context.subscriptions.push(
+        vscode.window.onDidEndTerminalShellExecution((e) => {
+            // Re-track CWD after any command completes
+            trackTerminalCwd(e.terminal);
+            // Also immediately persist
+            saveCwdMap(context);
         })
     );
 
