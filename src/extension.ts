@@ -262,21 +262,17 @@ function getTerminalKey(terminal: vscode.Terminal): string {
 function getTerminalViewColumn(terminal: vscode.Terminal): number | undefined {
     for (const group of vscode.window.tabGroups.all) {
         for (const tab of group.tabs) {
-            // Terminal tabs have a specific structure
-            const tabInput = tab.input;
-            if (tabInput && typeof tabInput === 'object' && 'uri' in tabInput) {
-                // Check if this is a terminal tab by examining the URI scheme
-                const uri = (tabInput as { uri?: vscode.Uri }).uri;
-                if (uri?.scheme === 'vscode-terminal') {
-                    // Match by terminal name (terminals don't expose direct tab matching)
-                    // The URI path often contains terminal info
-                    if (tab.label === terminal.name) {
-                        return group.viewColumn;
-                    }
+            // Terminal tabs use TabInputTerminal
+            if (tab.input instanceof vscode.TabInputTerminal) {
+                // Match by tab label (terminal name)
+                if (tab.label === terminal.name) {
+                    console.log(`TerminalGrid: Found terminal "${terminal.name}" in group ${group.viewColumn}`);
+                    return group.viewColumn;
                 }
             }
         }
     }
+    console.log(`TerminalGrid: Could not find terminal "${terminal.name}" in any tab group`);
     return undefined;
 }
 
@@ -465,31 +461,44 @@ async function getProcessCwd(pid: number): Promise<string | undefined> {
 }
 
 async function getTerminalCwd(terminal: vscode.Terminal): Promise<string | undefined> {
-    // Try shell integration first (most reliable when available)
+    const homeDir = os.homedir();
+    const isValidCwd = (cwd: string | undefined): cwd is string => {
+        return !!cwd && cwd !== '/' && cwd !== homeDir;
+    };
+
+    // First check our stored CWD - this is the most reliable since we tracked it
+    const storedCwd = terminalCwdMap.get(getTerminalKey(terminal));
+    if (isValidCwd(storedCwd)) {
+        console.log(`TerminalGrid: Using stored CWD for "${terminal.name}": ${storedCwd}`);
+        return storedCwd;
+    }
+
+    // Try shell integration (but only if it returns a valid non-home path)
     const shellIntegration = (terminal as unknown as ShellIntegrationCwd).shellIntegration;
     if (shellIntegration?.cwd) {
         const cwdUri = shellIntegration.cwd;
-        if (cwdUri instanceof vscode.Uri) {
-            return cwdUri.fsPath;
+        const cwdPath = cwdUri instanceof vscode.Uri ? cwdUri.fsPath : String(cwdUri);
+        if (isValidCwd(cwdPath)) {
+            // Update our stored map with this valid CWD
+            terminalCwdMap.set(getTerminalKey(terminal), cwdPath);
+            return cwdPath;
         }
-        return String(cwdUri);
-    }
-
-    // Try stored cwd from our tracking
-    const storedCwd = terminalCwdMap.get(getTerminalKey(terminal));
-    if (storedCwd) {
-        return storedCwd;
     }
 
     // Try to get cwd from the terminal's process
     const pid = await terminal.processId;
     if (pid) {
         const processCwd = await getProcessCwd(pid);
-        if (processCwd) {
+        if (isValidCwd(processCwd)) {
             // Cache it for future use
             terminalCwdMap.set(getTerminalKey(terminal), processCwd);
             return processCwd;
         }
+    }
+
+    // Return stored CWD even if it's home dir (better than nothing)
+    if (storedCwd) {
+        return storedCwd;
     }
 
     return undefined;
