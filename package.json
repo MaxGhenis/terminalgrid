@@ -49,6 +49,10 @@
       {
         "command": "terminalgrid.showTerminalStatus",
         "title": "TerminalGrid: Show Terminal Status"
+      },
+      {
+        "command": "terminalgrid.debugState",
+        "title": "TerminalGrid: Debug State"
       }
     ],
     "keybindings": [

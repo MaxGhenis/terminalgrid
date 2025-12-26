@@ -1151,24 +1151,25 @@ export async function activate(context: vscode.ExtensionContext) {
             selectedFolder = selected.description!;
         }
 
-        // Create terminal with folder name
+        // Create terminal with folder name AND cwd
         const terminalName = autoNameByFolder ? getFolderName(selectedFolder) : undefined;
         const options: vscode.TerminalOptions = {
             name: terminalName,
+            cwd: selectedFolder,  // Set CWD directly so VS Code tracks it
             iconPath: TERMINAL_ICON
         };
 
-        console.log(`TerminalGrid: Creating terminal "${terminalName}" for ${selectedFolder}`);
+        console.log(`TerminalGrid: Creating terminal "${terminalName}" in ${selectedFolder}`);
         const terminal = vscode.window.createTerminal(options);
         terminal.show();
 
         // Track the cwd
         terminalCwdMap.set(getTerminalKey(terminal), selectedFolder);
 
-        // Run cd and launch command (default: cc for claude)
+        // Run launch command (terminal already starts in the right directory)
         const launchCmd = autoLaunchCommand || 'cc';
         setTimeout(() => {
-            terminal.sendText(`cd "${selectedFolder}" && ${launchCmd}`);
+            terminal.sendText(launchCmd);
         }, 300);
 
         return terminal;
