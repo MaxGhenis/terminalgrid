@@ -596,12 +596,14 @@ async function saveTerminalState(context: vscode.ExtensionContext, gracefulExit:
 
 /**
  * Create a terminal in a specific editor group
+ * @param isCrashRecovery - If true, sends /resume after Claude starts
  */
 async function createTerminalInGroup(
     savedTerminal: SavedTerminal,
     autoNameByFolder: boolean,
     autoLaunchCommand: string,
-    targetGroup: number
+    targetGroup: number,
+    isCrashRecovery: boolean = false
 ): Promise<vscode.Terminal> {
     const terminalName = autoNameByFolder
         ? getFolderName(savedTerminal.cwd)
@@ -634,6 +636,14 @@ async function createTerminalInGroup(
         setTimeout(() => {
             terminal.sendText(autoLaunchCommand);
         }, 500);
+
+        // If recovering from crash, send /resume after Claude has time to start
+        if (isCrashRecovery) {
+            setTimeout(() => {
+                terminal.sendText('/resume');
+                console.log(`TerminalGrid: Sent /resume to "${terminalName}" for crash recovery`);
+            }, 3000);  // Wait 3s for Claude to initialize
+        }
     }
 
     return terminal;
@@ -745,7 +755,7 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         console.log(`TerminalGrid: Creating ${terminalsInGroup.length} terminal(s) in group ${groupNum}`);
 
         for (const savedTerminal of terminalsInGroup) {
-            await createTerminalInGroup(savedTerminal, autoNameByFolder, autoLaunchCommand, groupNum);
+            await createTerminalInGroup(savedTerminal, autoNameByFolder, autoLaunchCommand, groupNum, true);
             // Small delay between terminals to let VS Code settle
             await new Promise(resolve => setTimeout(resolve, 150));
         }
