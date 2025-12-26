@@ -9,12 +9,25 @@ const execAsync = promisify(exec);
 interface SavedTerminal {
     cwd: string;
     name?: string;
+    viewColumn?: number;  // Which editor group (1-based)
+}
+
+// VS Code editor layout structure (from vscode.getEditorLayout)
+interface EditorLayout {
+    orientation: number;  // 0 = horizontal, 1 = vertical
+    groups: Array<EditorLayoutGroup | EditorLayout>;
+}
+
+interface EditorLayoutGroup {
+    size?: number;
+    groups?: Array<EditorLayoutGroup | EditorLayout>;
 }
 
 interface TerminalState {
     terminals: SavedTerminal[];
     savedAt: number;
     gracefulExit: boolean;
+    editorLayout?: EditorLayout;  // Save the grid layout structure
 }
 
 // Shell integration cwd access type (for terminals with shell integration enabled)
@@ -243,6 +256,43 @@ function getTerminalKey(terminal: vscode.Terminal): string {
     return `${terminal.name}-${terminal.creationOptions?.name || 'default'}`;
 }
 
+/**
+ * Get the viewColumn (editor group) for a terminal by searching tabGroups
+ */
+function getTerminalViewColumn(terminal: vscode.Terminal): number | undefined {
+    for (const group of vscode.window.tabGroups.all) {
+        for (const tab of group.tabs) {
+            // Terminal tabs have a specific structure
+            const tabInput = tab.input;
+            if (tabInput && typeof tabInput === 'object' && 'uri' in tabInput) {
+                // Check if this is a terminal tab by examining the URI scheme
+                const uri = (tabInput as { uri?: vscode.Uri }).uri;
+                if (uri?.scheme === 'vscode-terminal') {
+                    // Match by terminal name (terminals don't expose direct tab matching)
+                    // The URI path often contains terminal info
+                    if (tab.label === terminal.name) {
+                        return group.viewColumn;
+                    }
+                }
+            }
+        }
+    }
+    return undefined;
+}
+
+/**
+ * Get the current editor layout structure
+ */
+async function getEditorLayout(): Promise<EditorLayout | undefined> {
+    try {
+        const layout = await vscode.commands.executeCommand<EditorLayout>('vscode.getEditorLayout');
+        return layout;
+    } catch (error) {
+        console.log('TerminalGrid: Failed to get editor layout:', error);
+        return undefined;
+    }
+}
+
 async function configureTerminalSettings() {
     const config = vscode.workspace.getConfiguration('terminalgrid');
     const globalConfig = vscode.workspace.getConfiguration();
@@ -445,7 +495,12 @@ async function getTerminalCwd(terminal: vscode.Terminal): Promise<string | undef
     return undefined;
 }
 
-async function collectTerminalState(): Promise<SavedTerminal[]> {
+interface CollectedState {
+    terminals: SavedTerminal[];
+    editorLayout?: EditorLayout;
+}
+
+async function collectTerminalState(): Promise<CollectedState> {
     const terminals: SavedTerminal[] = [];
 
     // Get common search paths for inferring cwd from name
@@ -472,6 +527,12 @@ async function collectTerminalState(): Promise<SavedTerminal[]> {
         }
     }
 
+    // Get editor layout for grid restoration
+    const editorLayout = await getEditorLayout();
+    if (editorLayout) {
+        console.log(`TerminalGrid: Captured editor layout:`, JSON.stringify(editorLayout));
+    }
+
     for (const terminal of vscode.window.terminals) {
         let cwd = await getTerminalCwd(terminal);
 
@@ -484,47 +545,114 @@ async function collectTerminalState(): Promise<SavedTerminal[]> {
             }
         }
 
+        // Get the viewColumn (editor group) for this terminal
+        const viewColumn = getTerminalViewColumn(terminal);
+
         if (cwd) {
             terminals.push({
                 cwd,
-                name: terminal.name
+                name: terminal.name,
+                viewColumn
             });
-            console.log(`TerminalGrid: Collected terminal "${terminal.name}" with cwd: ${cwd}`);
+            console.log(`TerminalGrid: Collected terminal "${terminal.name}" with cwd: ${cwd}, viewColumn: ${viewColumn}`);
         } else {
             // Last resort: save with home dir so terminal isn't lost
             terminals.push({
                 cwd: homeDir,
-                name: terminal.name
+                name: terminal.name,
+                viewColumn
             });
-            console.log(`TerminalGrid: Saved terminal "${terminal.name}" with fallback home dir`);
+            console.log(`TerminalGrid: Saved terminal "${terminal.name}" with fallback home dir, viewColumn: ${viewColumn}`);
         }
     }
 
-    return terminals;
+    return { terminals, editorLayout };
 }
 
 async function saveTerminalState(context: vscode.ExtensionContext, gracefulExit: boolean = false) {
-    const terminals = await collectTerminalState();
+    const collected = await collectTerminalState();
 
     // Debug: log what we're trying to save
     console.log(`TerminalGrid: Collecting state - found ${vscode.window.terminals.length} terminals`);
     console.log(`TerminalGrid: terminalCwdMap has ${terminalCwdMap.size} entries:`, Array.from(terminalCwdMap.entries()));
-    console.log(`TerminalGrid: Collected ${terminals.length} terminals with cwds:`, terminals);
+    console.log(`TerminalGrid: Collected ${collected.terminals.length} terminals with cwds:`, collected.terminals);
 
-    if (terminals.length === 0 && !gracefulExit) {
+    if (collected.terminals.length === 0 && !gracefulExit) {
         // Don't save empty state unless it's a graceful exit
         console.log('TerminalGrid: No terminals to save, skipping');
         return;
     }
 
     const state: TerminalState = {
-        terminals,
+        terminals: collected.terminals,
         savedAt: Date.now(),
-        gracefulExit
+        gracefulExit,
+        editorLayout: collected.editorLayout
     };
 
     await context.globalState.update(TERMINAL_STATE_KEY, state);
-    console.log(`TerminalGrid: Saved ${terminals.length} terminal states to globalState`);
+    console.log(`TerminalGrid: Saved ${collected.terminals.length} terminal states with layout to globalState`);
+}
+
+/**
+ * Create a terminal in a specific editor group
+ */
+async function createTerminalInGroup(
+    savedTerminal: SavedTerminal,
+    autoNameByFolder: boolean,
+    autoLaunchCommand: string,
+    targetGroup: number
+): Promise<vscode.Terminal> {
+    const terminalName = autoNameByFolder
+        ? getFolderName(savedTerminal.cwd)
+        : (savedTerminal.name || getFolderName(savedTerminal.cwd));
+
+    // Focus the target group before creating the terminal
+    // VS Code groups are 1-indexed
+    if (targetGroup > 0) {
+        try {
+            await vscode.commands.executeCommand(`workbench.action.focusEditorGroup${targetGroup}`);
+            await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (e) {
+            console.log(`TerminalGrid: Could not focus group ${targetGroup}:`, e);
+        }
+    }
+
+    const terminalOptions: vscode.TerminalOptions = {
+        cwd: savedTerminal.cwd,
+        name: terminalName,
+        iconPath: TERMINAL_ICON
+    };
+
+    console.log(`TerminalGrid: Creating terminal "${terminalName}" in group ${targetGroup}, cwd: ${savedTerminal.cwd}`);
+    const terminal = vscode.window.createTerminal(terminalOptions);
+
+    // Track the cwd immediately
+    terminalCwdMap.set(getTerminalKey(terminal), savedTerminal.cwd);
+
+    if (autoLaunchCommand) {
+        setTimeout(() => {
+            terminal.sendText(autoLaunchCommand);
+        }, 500);
+    }
+
+    return terminal;
+}
+
+/**
+ * Restore the editor layout structure
+ */
+async function restoreEditorLayout(layout: EditorLayout): Promise<boolean> {
+    try {
+        console.log('TerminalGrid: Restoring editor layout:', JSON.stringify(layout));
+        await vscode.commands.executeCommand('vscode.setEditorLayout', layout);
+        // Wait for layout to settle
+        await new Promise(resolve => setTimeout(resolve, 300));
+        return true;
+    } catch (error) {
+        console.log('TerminalGrid: Failed to restore editor layout:', error);
+        return false;
+    }
 }
 
 async function restoreTerminals(context: vscode.ExtensionContext): Promise<boolean> {
@@ -577,7 +705,7 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
 
     // Check if there are already terminals open (VS Code restored them)
     if (vscode.window.terminals.length > 0) {
-        console.log('TerminalGrid: VS Code restored terminals, but we need to replace them with correct cwds/names');
+        console.log('TerminalGrid: VS Code restored terminals, but we need to replace them with correct cwds/names/layout');
 
         // Kill VS Code's restored terminals - they have wrong cwds and names
         const existingTerminals = [...vscode.window.terminals];
@@ -587,78 +715,48 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
 
         // Wait for terminals to close
         await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Now create our terminals with correct cwds and names
-        console.log(`TerminalGrid: Creating ${uniqueTerminals.length} terminals with saved cwds/names`);
-
-        for (const savedTerminal of uniqueTerminals) {
-            // Prefer folder name when autoNameByFolder is enabled, fall back to saved name
-            const terminalName = autoNameByFolder
-                ? getFolderName(savedTerminal.cwd)
-                : (savedTerminal.name || getFolderName(savedTerminal.cwd));
-
-            const terminalOptions: vscode.TerminalOptions = {
-                cwd: savedTerminal.cwd,
-                name: terminalName,
-                iconPath: TERMINAL_ICON
-            };
-
-            console.log(`TerminalGrid: Creating terminal "${terminalName}" in ${savedTerminal.cwd}`);
-            const terminal = vscode.window.createTerminal(terminalOptions);
-
-            // Track the cwd immediately
-            terminalCwdMap.set(getTerminalKey(terminal), savedTerminal.cwd);
-
-            if (autoLaunchCommand) {
-                setTimeout(() => {
-                    terminal.sendText(autoLaunchCommand);
-                }, 500);
-            }
-        }
-
-        vscode.window.showInformationMessage(
-            `TerminalGrid: Restored ${uniqueTerminals.length} terminal(s) with saved directories`
-        );
-
-        await context.globalState.update(TERMINAL_STATE_KEY, undefined);
-        return true;
     }
 
-    console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals from crash`);
+    // Restore the editor layout first if we have it
+    const hasLayout = state.editorLayout && state.terminals.some(t => t.viewColumn !== undefined);
+    if (hasLayout && state.editorLayout) {
+        console.log('TerminalGrid: Restoring saved editor layout');
+        await restoreEditorLayout(state.editorLayout);
+    }
 
-    for (const savedTerminal of uniqueTerminals) {
-        // Prefer folder name when autoNameByFolder is enabled, fall back to saved name
-        const terminalName = autoNameByFolder
-            ? getFolderName(savedTerminal.cwd)
-            : (savedTerminal.name || getFolderName(savedTerminal.cwd));
-
-        const terminalOptions: vscode.TerminalOptions = {
-            cwd: savedTerminal.cwd,
-            name: terminalName,
-            iconPath: TERMINAL_ICON
-        };
-
-        console.log(`TerminalGrid: Restoring terminal "${terminalName}" in ${savedTerminal.cwd}`);
-        const terminal = vscode.window.createTerminal(terminalOptions);
-
-        // Track the cwd immediately
-        terminalCwdMap.set(getTerminalKey(terminal), savedTerminal.cwd);
-
-        // If there's an auto-launch command, run it after a short delay
-        if (autoLaunchCommand) {
-            setTimeout(() => {
-                terminal.sendText(autoLaunchCommand);
-            }, 500);
+    // Group terminals by viewColumn
+    const terminalsByGroup = new Map<number, SavedTerminal[]>();
+    for (const terminal of uniqueTerminals) {
+        const group = terminal.viewColumn || 1;
+        if (!terminalsByGroup.has(group)) {
+            terminalsByGroup.set(group, []);
         }
+        terminalsByGroup.get(group)!.push(terminal);
+    }
 
-        // Don't call terminal.show() - it can create empty editor groups
+    console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals across ${terminalsByGroup.size} groups`);
+
+    // Sort groups by viewColumn to ensure consistent ordering
+    const sortedGroups = [...terminalsByGroup.keys()].sort((a, b) => a - b);
+
+    // Create terminals in each group
+    for (const groupNum of sortedGroups) {
+        const terminalsInGroup = terminalsByGroup.get(groupNum)!;
+        console.log(`TerminalGrid: Creating ${terminalsInGroup.length} terminal(s) in group ${groupNum}`);
+
+        for (const savedTerminal of terminalsInGroup) {
+            await createTerminalInGroup(savedTerminal, autoNameByFolder, autoLaunchCommand, groupNum);
+            // Small delay between terminals to let VS Code settle
+            await new Promise(resolve => setTimeout(resolve, 150));
+        }
     }
 
     // Clear the saved state after restore
     await context.globalState.update(TERMINAL_STATE_KEY, undefined);
 
+    const layoutMsg = hasLayout ? ' with layout' : '';
     vscode.window.showInformationMessage(
-        `TerminalGrid: Restored ${uniqueTerminals.length} terminal(s) from previous session`
+        `TerminalGrid: Restored ${uniqueTerminals.length} terminal(s)${layoutMsg}`
     );
 
     return true;
