@@ -649,9 +649,10 @@ async function createTerminalInGroup(
         // If recovering from crash, send /resume after Claude has time to start
         if (isCrashRecovery) {
             setTimeout(() => {
-                terminal.sendText('/resume');
+                // Send /resume with explicit newline to ensure execution
+                terminal.sendText('/resume', true);  // true = add newline
                 console.log(`TerminalGrid: Sent /resume to "${terminalName}" for crash recovery`);
-            }, 3000);  // Wait 3s for Claude to initialize
+            }, 5000);  // Wait 5s for Claude to fully initialize
         }
     }
 
@@ -736,13 +737,6 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    // Restore the editor layout first if we have it
-    const hasLayout = state.editorLayout && state.terminals.some(t => t.viewColumn !== undefined);
-    if (hasLayout && state.editorLayout) {
-        console.log('TerminalGrid: Restoring saved editor layout');
-        await restoreEditorLayout(state.editorLayout);
-    }
-
     // Group terminals by viewColumn
     const terminalsByGroup = new Map<number, SavedTerminal[]>();
     for (const terminal of uniqueTerminals) {
@@ -753,18 +747,38 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         terminalsByGroup.get(group)!.push(terminal);
     }
 
-    console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals across ${terminalsByGroup.size} groups`);
-
     // Sort groups by viewColumn to ensure consistent ordering
     const sortedGroups = [...terminalsByGroup.keys()].sort((a, b) => a - b);
+    const numGroups = sortedGroups.length;
 
-    // Create terminals in each group
-    for (const groupNum of sortedGroups) {
+    console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals across ${numGroups} groups`);
+
+    // Create terminals with dynamic splitting based on group count
+    let isFirstTerminal = true;
+    for (let i = 0; i < sortedGroups.length; i++) {
+        const groupNum = sortedGroups[i];
         const terminalsInGroup = terminalsByGroup.get(groupNum)!;
-        console.log(`TerminalGrid: Creating ${terminalsInGroup.length} terminal(s) in group ${groupNum}`);
+        console.log(`TerminalGrid: Creating ${terminalsInGroup.length} terminal(s) for original group ${groupNum}`);
 
-        for (const savedTerminal of terminalsInGroup) {
-            await createTerminalInGroup(savedTerminal, autoNameByFolder, autoLaunchCommand, groupNum, true);
+        for (let j = 0; j < terminalsInGroup.length; j++) {
+            const savedTerminal = terminalsInGroup[j];
+
+            // For the first terminal in a new group (except the very first), split
+            if (j === 0 && !isFirstTerminal) {
+                // Determine split direction based on layout
+                // For 2 groups: split right
+                // For 3+ groups: alternate (right, down, right, down...)
+                if (numGroups === 2 || i % 2 === 1) {
+                    await vscode.commands.executeCommand('workbench.action.splitEditorRight');
+                } else if (i > 0) {
+                    await vscode.commands.executeCommand('workbench.action.splitEditorDown');
+                }
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+
+            await createTerminalInGroup(savedTerminal, autoNameByFolder, autoLaunchCommand, 0, true);
+            isFirstTerminal = false;
+
             // Small delay between terminals to let VS Code settle
             await new Promise(resolve => setTimeout(resolve, 150));
         }
@@ -773,7 +787,7 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
     // Clear the saved state after restore
     await context.globalState.update(TERMINAL_STATE_KEY, undefined);
 
-    const layoutMsg = hasLayout ? ' with layout' : '';
+    const layoutMsg = numGroups > 1 ? ` in ${numGroups} groups` : '';
     vscode.window.showInformationMessage(
         `TerminalGrid: Restored ${uniqueTerminals.length} terminal(s)${layoutMsg}`
     );
@@ -1010,6 +1024,44 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('terminalgrid.setup', async () => {
             await configureTerminalSettings();
             await context.globalState.update('hasConfigured', true);
+        })
+    );
+
+    // Debug command to show current saved state
+    context.subscriptions.push(
+        vscode.commands.registerCommand('terminalgrid.debugState', async () => {
+            const state = context.globalState.get<TerminalState>(TERMINAL_STATE_KEY);
+            const cwdMapEntries = Array.from(terminalCwdMap.entries());
+
+            let msg = `=== TerminalGrid Debug ===\n`;
+            msg += `\nCWD Map (${cwdMapEntries.length} entries):\n`;
+            for (const [key, cwd] of cwdMapEntries) {
+                msg += `  ${key} -> ${cwd}\n`;
+            }
+
+            msg += `\nCurrent Terminals (${vscode.window.terminals.length}):\n`;
+            for (const t of vscode.window.terminals) {
+                const key = getTerminalKey(t);
+                const storedCwd = terminalCwdMap.get(key);
+                const viewCol = getTerminalViewColumn(t);
+                msg += `  "${t.name}" key=${key} storedCwd=${storedCwd} viewColumn=${viewCol}\n`;
+            }
+
+            msg += `\nSaved State:\n`;
+            if (state) {
+                msg += `  savedAt: ${new Date(state.savedAt).toISOString()}\n`;
+                msg += `  gracefulExit: ${state.gracefulExit}\n`;
+                msg += `  terminals (${state.terminals.length}):\n`;
+                for (const t of state.terminals) {
+                    msg += `    "${t.name}" cwd=${t.cwd} viewColumn=${t.viewColumn}\n`;
+                }
+                msg += `  layout: ${state.editorLayout ? JSON.stringify(state.editorLayout) : 'none'}\n`;
+            } else {
+                msg += '  (no saved state)\n';
+            }
+
+            console.log(msg);
+            vscode.window.showInformationMessage('TerminalGrid debug info logged to console (Developer Tools)');
         })
     );
 
