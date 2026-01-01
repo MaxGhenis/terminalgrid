@@ -737,51 +737,62 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         await new Promise(resolve => setTimeout(resolve, 500));
     }
 
+    // Close any empty editor groups left over from VS Code's restoration
+    try {
+        await vscode.commands.executeCommand('workbench.action.closeEmptyEditorGroups');
+        await new Promise(resolve => setTimeout(resolve, 200));
+    } catch {
+        // Ignore if command not available
+    }
+
     // Get grid dimensions from saved layout
     const { rows, cols } = getGridDimensions(state.editorLayout);
     console.log(`TerminalGrid: Detected grid layout ${rows}x${cols}`);
 
-    // Group terminals by their saved viewColumn
-    const terminalsByGroup = groupTerminalsByViewColumn(uniqueTerminals);
-    const groupCount = terminalsByGroup.size;
+    // Interleaved grid creation: create terminals immediately after splits to avoid empty groups
+    // Strategy: create first row left-to-right, then for each column split down and create
+    console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals in ${rows}x${cols} grid`);
 
-    console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals across ${groupCount} groups`);
+    let terminalIndex = 0;
 
-    // Create the first terminal to establish an editor terminal area
-    const firstTerminal = uniqueTerminals[0];
-    const firstTerminalCreated = await createTerminalInGroup(firstTerminal, autoNameByFolder, autoLaunchCommand, 0, true);
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    // If we need a grid layout, create it by executing split commands
-    if (rows > 1 || cols > 1) {
-        const splitPlan = createGridSplitPlan(rows, cols);
-        console.log(`TerminalGrid: Executing split plan:`, splitPlan);
-
-        for (const step of splitPlan) {
-            await new Promise(resolve => setTimeout(resolve, 150));
-
-            if (step.action === 'splitRight') {
-                await vscode.commands.executeCommand('workbench.action.splitEditorRight');
-            } else if (step.action === 'splitDown') {
-                await vscode.commands.executeCommand('workbench.action.splitEditorDown');
-            } else if (step.action === 'focusGroup' && step.group) {
-                await vscode.commands.executeCommand(`workbench.action.focusEditorGroup${step.group}`);
-            }
-        }
+    // Create first terminal (position [0,0])
+    if (terminalIndex < uniqueTerminals.length) {
+        await createTerminalInGroup(uniqueTerminals[terminalIndex], autoNameByFolder, autoLaunchCommand, 0, true);
+        terminalIndex++;
         await new Promise(resolve => setTimeout(resolve, 300));
     }
 
-    // Now create remaining terminals in their correct groups
-    // Skip the first terminal as it was already created
-    for (let i = 1; i < uniqueTerminals.length; i++) {
-        const savedTerminal = uniqueTerminals[i];
-        const targetGroup = savedTerminal.viewColumn || 1;
-
-        await createTerminalInGroup(savedTerminal, autoNameByFolder, autoLaunchCommand, targetGroup, true);
+    // Create remaining columns in first row: splitRight, then immediately create terminal
+    for (let col = 1; col < cols && terminalIndex < uniqueTerminals.length; col++) {
+        await vscode.commands.executeCommand('workbench.action.splitEditorRight');
+        await new Promise(resolve => setTimeout(resolve, 150));
+        // After splitRight, focus is on the new (empty) group - create terminal here
+        await createTerminalInGroup(uniqueTerminals[terminalIndex], autoNameByFolder, autoLaunchCommand, 0, true);
+        terminalIndex++;
         await new Promise(resolve => setTimeout(resolve, 200));
     }
 
-    // Close any empty editor groups that might have been created
+    // For each row after the first, split down from each column
+    for (let row = 1; row < rows; row++) {
+        for (let col = 0; col < cols && terminalIndex < uniqueTerminals.length; col++) {
+            // Focus the group at [0, col] (top of this column)
+            // After first row creation, groups are numbered 1, 2, 3... left to right
+            const topGroupNumber = col + 1;
+            await vscode.commands.executeCommand(`workbench.action.focusEditorGroup${topGroupNumber}`);
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Split down - this creates a new group below and focuses it
+            await vscode.commands.executeCommand('workbench.action.splitEditorDown');
+            await new Promise(resolve => setTimeout(resolve, 150));
+
+            // Create terminal in the newly focused (empty) group
+            await createTerminalInGroup(uniqueTerminals[terminalIndex], autoNameByFolder, autoLaunchCommand, 0, true);
+            terminalIndex++;
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+    }
+
+    // Final cleanup: close any remaining empty groups (shouldn't be any with interleaved approach)
     try {
         await vscode.commands.executeCommand('workbench.action.closeEmptyEditorGroups');
     } catch {
