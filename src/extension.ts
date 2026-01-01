@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { getFolderName, isClaudeProcess, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName, scanProjectFolders, createRestorePlan } from './utils';
+import { getFolderName, isClaudeProcess, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName, scanProjectFolders, createRestorePlan, getGridDimensions, createGridSplitPlan, groupTerminalsByViewColumn } from './utils';
 
 const execAsync = promisify(exec);
 
@@ -737,23 +737,62 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    // Simple approach: create all terminals as tabs in a single group
-    // Don't try to restore complex grid layouts - user can arrange manually
-    // This avoids blank panels and cascading issues
+    // Get grid dimensions from saved layout
+    const { rows, cols } = getGridDimensions(state.editorLayout);
+    console.log(`TerminalGrid: Detected grid layout ${rows}x${cols}`);
 
-    console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals (as tabs, user can arrange)`);
+    // Group terminals by their saved viewColumn
+    const terminalsByGroup = groupTerminalsByViewColumn(uniqueTerminals);
+    const groupCount = terminalsByGroup.size;
 
-    for (const savedTerminal of uniqueTerminals) {
-        await createTerminalInGroup(savedTerminal, autoNameByFolder, autoLaunchCommand, 0, true);
-        // Small delay between terminals to let VS Code settle
+    console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals across ${groupCount} groups`);
+
+    // Create the first terminal to establish an editor terminal area
+    const firstTerminal = uniqueTerminals[0];
+    const firstTerminalCreated = await createTerminalInGroup(firstTerminal, autoNameByFolder, autoLaunchCommand, 0, true);
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // If we need a grid layout, create it by executing split commands
+    if (rows > 1 || cols > 1) {
+        const splitPlan = createGridSplitPlan(rows, cols);
+        console.log(`TerminalGrid: Executing split plan:`, splitPlan);
+
+        for (const step of splitPlan) {
+            await new Promise(resolve => setTimeout(resolve, 150));
+
+            if (step.action === 'splitRight') {
+                await vscode.commands.executeCommand('workbench.action.splitEditorRight');
+            } else if (step.action === 'splitDown') {
+                await vscode.commands.executeCommand('workbench.action.splitEditorDown');
+            } else if (step.action === 'focusGroup' && step.group) {
+                await vscode.commands.executeCommand(`workbench.action.focusEditorGroup${step.group}`);
+            }
+        }
+        await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    // Now create remaining terminals in their correct groups
+    // Skip the first terminal as it was already created
+    for (let i = 1; i < uniqueTerminals.length; i++) {
+        const savedTerminal = uniqueTerminals[i];
+        const targetGroup = savedTerminal.viewColumn || 1;
+
+        await createTerminalInGroup(savedTerminal, autoNameByFolder, autoLaunchCommand, targetGroup, true);
         await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    // Close any empty editor groups that might have been created
+    try {
+        await vscode.commands.executeCommand('workbench.action.closeEmptyEditorGroups');
+    } catch {
+        // Ignore if command not available
     }
 
     // Clear the saved state after restore
     await context.globalState.update(TERMINAL_STATE_KEY, undefined);
 
     vscode.window.showInformationMessage(
-        `TerminalGrid: Restored ${uniqueTerminals.length} terminal(s) - arrange as needed`
+        `TerminalGrid: Restored ${uniqueTerminals.length} terminal(s) in ${rows}x${cols} grid`
     );
 
     return true;

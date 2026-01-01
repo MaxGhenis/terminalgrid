@@ -214,6 +214,104 @@ export function createRestorePlan<T extends { viewColumn?: number }>(
 }
 
 /**
+ * Editor layout group structure
+ */
+export interface EditorLayoutGroup {
+    size?: number;
+    orientation?: number;
+    groups?: EditorLayoutGroup[];
+}
+
+/**
+ * VS Code editor layout structure
+ */
+export interface EditorLayout {
+    orientation: number;
+    groups: EditorLayoutGroup[];
+}
+
+/**
+ * Get grid dimensions from editor layout
+ * @param layout - VS Code editor layout
+ * @returns Object with rows and cols
+ */
+export function getGridDimensions(layout: EditorLayout | undefined): { rows: number; cols: number } {
+    if (!layout || !layout.groups || layout.groups.length === 0) {
+        return { rows: 1, cols: 1 };
+    }
+
+    // Single group = 1x1
+    if (layout.groups.length === 1 && !layout.groups[0].groups) {
+        return { rows: 1, cols: 1 };
+    }
+
+    // Orientation 0 = horizontal (columns side by side)
+    // Orientation 1 = vertical (rows stacked)
+    if (layout.orientation === 0) {
+        // Horizontal split - we have columns
+        const cols = layout.groups.length;
+        // Check if first group has nested rows
+        const firstGroup = layout.groups[0];
+        const rows = firstGroup.groups ? firstGroup.groups.length : 1;
+        return { rows, cols };
+    } else {
+        // Vertical split - we have rows
+        const rows = layout.groups.length;
+        // Check if first group has nested columns
+        const firstGroup = layout.groups[0];
+        const cols = firstGroup.groups ? firstGroup.groups.length : 1;
+        return { rows, cols };
+    }
+}
+
+/**
+ * Create a split plan to achieve the desired grid dimensions
+ * @param rows - Number of rows
+ * @param cols - Number of columns
+ * @returns Array of actions to execute
+ */
+export function createGridSplitPlan(rows: number, cols: number): Array<{ action: string; group?: number }> {
+    const plan: Array<{ action: string; group?: number }> = [];
+
+    if (rows === 1 && cols === 1) {
+        return plan;
+    }
+
+    // First, create all columns by splitting right
+    for (let c = 1; c < cols; c++) {
+        plan.push({ action: 'splitRight' });
+    }
+
+    // Then, for each column, split down to create rows
+    if (rows > 1) {
+        for (let c = 0; c < cols; c++) {
+            // Only need to focus group if we have multiple columns
+            if (cols > 1) {
+                plan.push({ action: 'focusGroup', group: c + 1 });
+            }
+            for (let r = 1; r < rows; r++) {
+                plan.push({ action: 'splitDown' });
+            }
+        }
+    }
+
+    return plan;
+}
+
+/**
+ * Get the group number for a grid cell position
+ * Groups are numbered left-to-right, top-to-bottom, starting at 1
+ * @param row - Row index (0-based)
+ * @param col - Column index (0-based)
+ * @param rows - Total number of rows
+ * @param cols - Total number of columns
+ * @returns Group number (1-based)
+ */
+export function getGridCellGroup(row: number, col: number, rows: number, cols: number): number {
+    return row * cols + col + 1;
+}
+
+/**
  * Try to infer CWD from terminal name by searching common paths
  * @param name - Terminal name (e.g., "marginal-child" or "optiqal_ai")
  * @param searchPaths - Paths to search for matching folders

@@ -494,3 +494,147 @@ describe('createRestorePlan', () => {
         expect(plan[0].terminals[0].name).toBe('a');
     });
 });
+
+// TDD: Layout analysis and grid creation
+import { getGridDimensions, createGridSplitPlan, getGridCellGroup } from '../utils';
+
+describe('getGridDimensions', () => {
+    it('should return 1x1 for single group layout', () => {
+        const layout = { orientation: 0, groups: [{ size: 1 }] };
+        expect(getGridDimensions(layout)).toEqual({ rows: 1, cols: 1 });
+    });
+
+    it('should return 1x2 for horizontal split (2 columns)', () => {
+        const layout = {
+            orientation: 0,  // horizontal
+            groups: [{ size: 0.5 }, { size: 0.5 }]
+        };
+        expect(getGridDimensions(layout)).toEqual({ rows: 1, cols: 2 });
+    });
+
+    it('should return 2x1 for vertical split (2 rows)', () => {
+        const layout = {
+            orientation: 1,  // vertical
+            groups: [{ size: 0.5 }, { size: 0.5 }]
+        };
+        expect(getGridDimensions(layout)).toEqual({ rows: 2, cols: 1 });
+    });
+
+    it('should return 2x2 for a 2x2 grid', () => {
+        // 2x2 grid: vertical split first (rows), then horizontal in each row
+        const layout = {
+            orientation: 1,  // vertical (rows)
+            groups: [
+                { orientation: 0, groups: [{ size: 0.5 }, { size: 0.5 }] },
+                { orientation: 0, groups: [{ size: 0.5 }, { size: 0.5 }] }
+            ]
+        };
+        expect(getGridDimensions(layout)).toEqual({ rows: 2, cols: 2 });
+    });
+
+    it('should return 2x3 for a 2x3 grid', () => {
+        const layout = {
+            orientation: 1,
+            groups: [
+                { orientation: 0, groups: [{ size: 0.33 }, { size: 0.33 }, { size: 0.34 }] },
+                { orientation: 0, groups: [{ size: 0.33 }, { size: 0.33 }, { size: 0.34 }] }
+            ]
+        };
+        expect(getGridDimensions(layout)).toEqual({ rows: 2, cols: 3 });
+    });
+
+    it('should handle undefined layout', () => {
+        expect(getGridDimensions(undefined)).toEqual({ rows: 1, cols: 1 });
+    });
+});
+
+describe('createGridSplitPlan', () => {
+    it('should return empty plan for 1x1 grid', () => {
+        const plan = createGridSplitPlan(1, 1);
+        expect(plan).toEqual([]);
+    });
+
+    it('should return single splitRight for 1x2 grid', () => {
+        const plan = createGridSplitPlan(1, 2);
+        expect(plan).toEqual([
+            { action: 'splitRight' }
+        ]);
+    });
+
+    it('should return single splitDown for 2x1 grid', () => {
+        const plan = createGridSplitPlan(2, 1);
+        expect(plan).toEqual([
+            { action: 'splitDown' }
+        ]);
+    });
+
+    it('should return correct plan for 2x2 grid', () => {
+        const plan = createGridSplitPlan(2, 2);
+        // To create 2x2:
+        // 1. splitRight (now 2 cols)
+        // 2. focusGroup 1, splitDown (col 1 has 2 rows)
+        // 3. focusGroup 2, splitDown (col 2 has 2 rows)
+        expect(plan).toEqual([
+            { action: 'splitRight' },
+            { action: 'focusGroup', group: 1 },
+            { action: 'splitDown' },
+            { action: 'focusGroup', group: 2 },
+            { action: 'splitDown' }
+        ]);
+    });
+
+    it('should return correct plan for 1x3 grid (3 columns)', () => {
+        const plan = createGridSplitPlan(1, 3);
+        expect(plan).toEqual([
+            { action: 'splitRight' },
+            { action: 'splitRight' }
+        ]);
+    });
+
+    it('should return correct plan for 3x1 grid (3 rows)', () => {
+        const plan = createGridSplitPlan(3, 1);
+        expect(plan).toEqual([
+            { action: 'splitDown' },
+            { action: 'splitDown' }
+        ]);
+    });
+});
+
+describe('getGridCellGroup', () => {
+    it('should return 1 for single cell grid', () => {
+        expect(getGridCellGroup(0, 0, 1, 1)).toBe(1);
+    });
+
+    it('should return correct groups for 1x2 grid', () => {
+        // [1] [2]
+        expect(getGridCellGroup(0, 0, 1, 2)).toBe(1);
+        expect(getGridCellGroup(0, 1, 1, 2)).toBe(2);
+    });
+
+    it('should return correct groups for 2x1 grid', () => {
+        // [1]
+        // [2]
+        expect(getGridCellGroup(0, 0, 2, 1)).toBe(1);
+        expect(getGridCellGroup(1, 0, 2, 1)).toBe(2);
+    });
+
+    it('should return correct groups for 2x2 grid', () => {
+        // [1] [2]
+        // [3] [4]
+        expect(getGridCellGroup(0, 0, 2, 2)).toBe(1);
+        expect(getGridCellGroup(0, 1, 2, 2)).toBe(2);
+        expect(getGridCellGroup(1, 0, 2, 2)).toBe(3);
+        expect(getGridCellGroup(1, 1, 2, 2)).toBe(4);
+    });
+
+    it('should return correct groups for 2x3 grid', () => {
+        // [1] [2] [3]
+        // [4] [5] [6]
+        expect(getGridCellGroup(0, 0, 2, 3)).toBe(1);
+        expect(getGridCellGroup(0, 1, 2, 3)).toBe(2);
+        expect(getGridCellGroup(0, 2, 2, 3)).toBe(3);
+        expect(getGridCellGroup(1, 0, 2, 3)).toBe(4);
+        expect(getGridCellGroup(1, 1, 2, 3)).toBe(5);
+        expect(getGridCellGroup(1, 2, 2, 3)).toBe(6);
+    });
+});
