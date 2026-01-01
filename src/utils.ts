@@ -155,6 +155,65 @@ export function scanProjectFolders(searchPaths: string[]): string[] {
 }
 
 /**
+ * Saved terminal state with layout info
+ */
+export interface SavedTerminalInfo {
+    cwd: string;
+    name?: string;
+    viewColumn?: number;
+}
+
+/**
+ * Group terminals by their viewColumn (editor group)
+ * @param terminals - Array of saved terminals with optional viewColumn
+ * @returns Map from viewColumn to terminals in that group
+ */
+export function groupTerminalsByViewColumn<T extends { viewColumn?: number }>(
+    terminals: T[]
+): Map<number, T[]> {
+    const groups = new Map<number, T[]>();
+    for (const terminal of terminals) {
+        const group = terminal.viewColumn || 1;
+        if (!groups.has(group)) {
+            groups.set(group, []);
+        }
+        groups.get(group)!.push(terminal);
+    }
+    return groups;
+}
+
+/**
+ * Get sorted unique viewColumn numbers from terminals
+ * @param terminals - Array of saved terminals with optional viewColumn
+ * @returns Sorted array of unique viewColumn numbers
+ */
+export function getSortedViewColumns<T extends { viewColumn?: number }>(terminals: T[]): number[] {
+    const columns = new Set<number>();
+    for (const terminal of terminals) {
+        columns.add(terminal.viewColumn || 1);
+    }
+    return Array.from(columns).sort((a, b) => a - b);
+}
+
+/**
+ * Create a restore plan that maps terminals to their target group positions
+ * @param terminals - Array of saved terminals with optional viewColumn
+ * @returns Array of groups, each containing terminals to create in that position
+ */
+export function createRestorePlan<T extends { viewColumn?: number }>(
+    terminals: T[]
+): { groupIndex: number; originalViewColumn: number; terminals: T[] }[] {
+    const groups = groupTerminalsByViewColumn(terminals);
+    const sortedColumns = getSortedViewColumns(terminals);
+
+    return sortedColumns.map((viewColumn, index) => ({
+        groupIndex: index + 1,  // VS Code groups are 1-indexed
+        originalViewColumn: viewColumn,
+        terminals: groups.get(viewColumn) || []
+    }));
+}
+
+/**
  * Try to infer CWD from terminal name by searching common paths
  * @param name - Terminal name (e.g., "marginal-child" or "optiqal_ai")
  * @param searchPaths - Paths to search for matching folders

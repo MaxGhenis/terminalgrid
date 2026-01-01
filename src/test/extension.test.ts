@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName, normalizeForMatch, scanProjectFolders } from '../utils';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName, normalizeForMatch, scanProjectFolders, groupTerminalsByViewColumn, getSortedViewColumns, createRestorePlan } from '../utils';
 
 describe('getFolderName', () => {
     it('should return the last folder name from a path', () => {
@@ -327,5 +327,170 @@ describe('createNamedTerminal behavior', () => {
         // After creating terminal, sends: cd "<folder>" && cc
         // The cc command launches Claude Code
         expect(true).toBe(true);
+    });
+});
+
+describe('groupTerminalsByViewColumn', () => {
+    it('should group terminals by their viewColumn', () => {
+        const terminals = [
+            { cwd: '/path/a', name: 'a', viewColumn: 1 },
+            { cwd: '/path/b', name: 'b', viewColumn: 2 },
+            { cwd: '/path/c', name: 'c', viewColumn: 1 },
+            { cwd: '/path/d', name: 'd', viewColumn: 3 },
+        ];
+        const groups = groupTerminalsByViewColumn(terminals);
+
+        expect(groups.size).toBe(3);
+        expect(groups.get(1)?.length).toBe(2);
+        expect(groups.get(2)?.length).toBe(1);
+        expect(groups.get(3)?.length).toBe(1);
+    });
+
+    it('should default to viewColumn 1 if not specified', () => {
+        const terminals: { cwd: string; name: string; viewColumn?: number }[] = [
+            { cwd: '/path/a', name: 'a' },
+            { cwd: '/path/b', name: 'b' },
+        ];
+        const groups = groupTerminalsByViewColumn(terminals);
+
+        expect(groups.size).toBe(1);
+        expect(groups.get(1)?.length).toBe(2);
+    });
+
+    it('should handle empty array', () => {
+        const groups = groupTerminalsByViewColumn([]);
+        expect(groups.size).toBe(0);
+    });
+
+    it('should handle mixed specified and unspecified viewColumns', () => {
+        const terminals = [
+            { cwd: '/path/a', name: 'a', viewColumn: 2 },
+            { cwd: '/path/b', name: 'b' },  // defaults to 1
+            { cwd: '/path/c', name: 'c', viewColumn: 2 },
+        ];
+        const groups = groupTerminalsByViewColumn(terminals);
+
+        expect(groups.size).toBe(2);
+        expect(groups.get(1)?.length).toBe(1);
+        expect(groups.get(2)?.length).toBe(2);
+    });
+});
+
+describe('getSortedViewColumns', () => {
+    it('should return sorted unique viewColumn numbers', () => {
+        const terminals = [
+            { viewColumn: 3 },
+            { viewColumn: 1 },
+            { viewColumn: 2 },
+            { viewColumn: 1 },
+        ];
+        const columns = getSortedViewColumns(terminals);
+
+        expect(columns).toEqual([1, 2, 3]);
+    });
+
+    it('should default undefined viewColumn to 1', () => {
+        const terminals = [
+            { viewColumn: 2 },
+            {},
+        ];
+        const columns = getSortedViewColumns(terminals);
+
+        expect(columns).toEqual([1, 2]);
+    });
+
+    it('should handle empty array', () => {
+        const columns = getSortedViewColumns([]);
+        expect(columns).toEqual([]);
+    });
+
+    it('should handle non-contiguous viewColumn numbers', () => {
+        const terminals = [
+            { viewColumn: 5 },
+            { viewColumn: 2 },
+            { viewColumn: 8 },
+        ];
+        const columns = getSortedViewColumns(terminals);
+
+        expect(columns).toEqual([2, 5, 8]);
+    });
+});
+
+describe('createRestorePlan', () => {
+    it('should create a restore plan mapping viewColumns to group indices', () => {
+        const terminals = [
+            { cwd: '/path/a', name: 'a', viewColumn: 2 },
+            { cwd: '/path/b', name: 'b', viewColumn: 1 },
+            { cwd: '/path/c', name: 'c', viewColumn: 3 },
+        ];
+        const plan = createRestorePlan(terminals);
+
+        expect(plan).toHaveLength(3);
+
+        // First group (groupIndex: 1) should be original viewColumn 1
+        expect(plan[0].groupIndex).toBe(1);
+        expect(plan[0].originalViewColumn).toBe(1);
+        expect(plan[0].terminals.length).toBe(1);
+        expect(plan[0].terminals[0].name).toBe('b');
+
+        // Second group (groupIndex: 2) should be original viewColumn 2
+        expect(plan[1].groupIndex).toBe(2);
+        expect(plan[1].originalViewColumn).toBe(2);
+        expect(plan[1].terminals[0].name).toBe('a');
+
+        // Third group (groupIndex: 3) should be original viewColumn 3
+        expect(plan[2].groupIndex).toBe(3);
+        expect(plan[2].originalViewColumn).toBe(3);
+        expect(plan[2].terminals[0].name).toBe('c');
+    });
+
+    it('should handle multiple terminals in same viewColumn', () => {
+        const terminals = [
+            { cwd: '/path/a', name: 'a', viewColumn: 1 },
+            { cwd: '/path/b', name: 'b', viewColumn: 1 },
+            { cwd: '/path/c', name: 'c', viewColumn: 2 },
+        ];
+        const plan = createRestorePlan(terminals);
+
+        expect(plan).toHaveLength(2);
+        expect(plan[0].terminals.length).toBe(2);
+        expect(plan[1].terminals.length).toBe(1);
+    });
+
+    it('should handle non-contiguous viewColumn numbers', () => {
+        const terminals = [
+            { cwd: '/path/a', name: 'a', viewColumn: 2 },
+            { cwd: '/path/b', name: 'b', viewColumn: 5 },
+            { cwd: '/path/c', name: 'c', viewColumn: 8 },
+        ];
+        const plan = createRestorePlan(terminals);
+
+        // Should map to contiguous group indices regardless of original viewColumn
+        expect(plan[0].groupIndex).toBe(1);
+        expect(plan[0].originalViewColumn).toBe(2);
+
+        expect(plan[1].groupIndex).toBe(2);
+        expect(plan[1].originalViewColumn).toBe(5);
+
+        expect(plan[2].groupIndex).toBe(3);
+        expect(plan[2].originalViewColumn).toBe(8);
+    });
+
+    it('should handle empty array', () => {
+        const plan = createRestorePlan([]);
+        expect(plan).toEqual([]);
+    });
+
+    it('should default undefined viewColumn to 1', () => {
+        const terminals = [
+            { cwd: '/path/a', name: 'a' },
+            { cwd: '/path/b', name: 'b', viewColumn: 2 },
+        ];
+        const plan = createRestorePlan(terminals);
+
+        expect(plan).toHaveLength(2);
+        expect(plan[0].groupIndex).toBe(1);
+        expect(plan[0].originalViewColumn).toBe(1);
+        expect(plan[0].terminals[0].name).toBe('a');
     });
 });
