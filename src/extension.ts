@@ -737,48 +737,23 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    // Create a restore plan using the utility function
-    const restorePlan = createRestorePlan(uniqueTerminals);
-    const numGroups = restorePlan.length;
+    // Simple approach: create all terminals as tabs in a single group
+    // Don't try to restore complex grid layouts - user can arrange manually
+    // This avoids blank panels and cascading issues
 
-    console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals across ${numGroups} groups`);
-    console.log(`TerminalGrid: Restore plan:`, restorePlan.map(p => `group ${p.groupIndex} (was ${p.originalViewColumn}): ${p.terminals.length} terminals`).join(', '));
+    console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals (as tabs, user can arrange)`);
 
-    // DON'T use setEditorLayout - it creates empty groups
-    // Instead, create terminals one by one and split as needed
-
-    let currentGroupCount = 1;
-    for (const group of restorePlan) {
-        console.log(`TerminalGrid: Creating ${group.terminals.length} terminal(s) in group ${group.groupIndex}`);
-
-        // If we need a new group, split first
-        if (group.groupIndex > currentGroupCount) {
-            // Split to create a new group
-            await vscode.commands.executeCommand('workbench.action.splitEditorRight');
-            await new Promise(resolve => setTimeout(resolve, 150));
-            currentGroupCount++;
-        }
-
-        for (const savedTerminal of group.terminals) {
-            await createTerminalInGroup(savedTerminal, autoNameByFolder, autoLaunchCommand, 0, true);
-            // Small delay between terminals to let VS Code settle
-            await new Promise(resolve => setTimeout(resolve, 200));
-        }
-    }
-
-    // Close any empty editor groups that might have been created
-    try {
-        await vscode.commands.executeCommand('workbench.action.closeEmptyEditorGroups');
-    } catch (e) {
-        console.log('TerminalGrid: Could not close empty groups:', e);
+    for (const savedTerminal of uniqueTerminals) {
+        await createTerminalInGroup(savedTerminal, autoNameByFolder, autoLaunchCommand, 0, true);
+        // Small delay between terminals to let VS Code settle
+        await new Promise(resolve => setTimeout(resolve, 200));
     }
 
     // Clear the saved state after restore
     await context.globalState.update(TERMINAL_STATE_KEY, undefined);
 
-    const layoutMsg = numGroups > 1 ? ` in ${numGroups} groups` : '';
     vscode.window.showInformationMessage(
-        `TerminalGrid: Restored ${uniqueTerminals.length} terminal(s)${layoutMsg}`
+        `TerminalGrid: Restored ${uniqueTerminals.length} terminal(s) - arrange as needed`
     );
 
     return true;
