@@ -752,35 +752,44 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
     const numGroups = sortedGroups.length;
 
     console.log(`TerminalGrid: Restoring ${uniqueTerminals.length} terminals across ${numGroups} groups`);
+    console.log(`TerminalGrid: Groups to restore: ${sortedGroups.join(', ')}`);
 
-    // Create terminals with dynamic splitting based on group count
-    let isFirstTerminal = true;
+    // First restore the editor layout if we have it saved
+    if (state.editorLayout && numGroups > 1) {
+        console.log('TerminalGrid: Restoring saved editor layout first');
+        await restoreEditorLayout(state.editorLayout);
+        await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    // Create terminals in each group
+    // We need to map the original viewColumn numbers to the current group numbers
+    // After restoring layout, groups are numbered 1, 2, 3, etc. in order
     for (let i = 0; i < sortedGroups.length; i++) {
-        const groupNum = sortedGroups[i];
-        const terminalsInGroup = terminalsByGroup.get(groupNum)!;
-        console.log(`TerminalGrid: Creating ${terminalsInGroup.length} terminal(s) for original group ${groupNum}`);
+        const originalGroup = sortedGroups[i];
+        const currentGroup = i + 1;  // Groups are 1-indexed after layout restore
+        const terminalsInGroup = terminalsByGroup.get(originalGroup)!;
 
-        for (let j = 0; j < terminalsInGroup.length; j++) {
-            const savedTerminal = terminalsInGroup[j];
+        console.log(`TerminalGrid: Creating ${terminalsInGroup.length} terminal(s) in group ${currentGroup} (was ${originalGroup})`);
 
-            // For the first terminal in a new group (except the very first), split
-            if (j === 0 && !isFirstTerminal) {
-                // Determine split direction based on layout
-                // For 2 groups: split right
-                // For 3+ groups: alternate (right, down, right, down...)
-                if (numGroups === 2 || i % 2 === 1) {
-                    await vscode.commands.executeCommand('workbench.action.splitEditorRight');
-                } else if (i > 0) {
-                    await vscode.commands.executeCommand('workbench.action.splitEditorDown');
+        for (const savedTerminal of terminalsInGroup) {
+            // Focus the target group before creating the terminal
+            if (numGroups > 1) {
+                try {
+                    // Use focusNthEditorGroup to focus by position
+                    await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+                    for (let g = 1; g < currentGroup; g++) {
+                        await vscode.commands.executeCommand('workbench.action.focusNextGroup');
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                } catch (e) {
+                    console.log(`TerminalGrid: Could not focus group ${currentGroup}:`, e);
                 }
-                await new Promise(resolve => setTimeout(resolve, 200));
             }
 
             await createTerminalInGroup(savedTerminal, autoNameByFolder, autoLaunchCommand, 0, true);
-            isFirstTerminal = false;
 
             // Small delay between terminals to let VS Code settle
-            await new Promise(resolve => setTimeout(resolve, 150));
+            await new Promise(resolve => setTimeout(resolve, 200));
         }
     }
 
