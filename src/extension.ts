@@ -737,12 +737,19 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    // Close any empty editor groups left over from VS Code's restoration
+    // Close ALL editors to start with a clean slate (not just empty groups)
+    // This prevents leftover Welcome tabs or other editors from interfering
     try {
-        await vscode.commands.executeCommand('workbench.action.closeEmptyEditorGroups');
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+        await new Promise(resolve => setTimeout(resolve, 300));
     } catch {
-        // Ignore if command not available
+        // Fallback: try closing just empty groups
+        try {
+            await vscode.commands.executeCommand('workbench.action.closeEmptyEditorGroups');
+            await new Promise(resolve => setTimeout(resolve, 200));
+        } catch {
+            // Ignore if command not available
+        }
     }
 
     // Get grid dimensions from saved layout
@@ -755,8 +762,11 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
 
     let terminalIndex = 0;
 
-    // Create first terminal (position [0,0])
+    // Create first terminal (position [0,0]) - focus group 1 explicitly
     if (terminalIndex < uniqueTerminals.length) {
+        // Focus first group to ensure terminal is created in the right place
+        await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+        await new Promise(resolve => setTimeout(resolve, 100));
         await createTerminalInGroup(uniqueTerminals[terminalIndex], autoNameByFolder, autoLaunchCommand, 0, true);
         terminalIndex++;
         await new Promise(resolve => setTimeout(resolve, 300));
