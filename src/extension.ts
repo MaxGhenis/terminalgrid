@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { getFolderName, isClaudeProcess, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName, scanProjectFolders, createRestorePlan, getGridDimensions, createGridSplitPlan, groupTerminalsByViewColumn } from './utils';
+import { getFolderName, isClaudeProcess, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName, scanProjectFolders, createRestorePlan, getGridDimensions, createGridSplitPlan, groupTerminalsByViewColumn, writeStateFile, readStateFile, deleteStateFile, writeCwdMapFile, readCwdMapFile } from './utils';
 
 const execAsync = promisify(exec);
 
@@ -46,25 +46,47 @@ let saveInterval: NodeJS.Timeout | undefined;
 let iconUpdateInterval: NodeJS.Timeout | undefined;
 const terminalCwdMap: Map<string, string> = new Map();
 
-// Load CWD map from persistent storage
+// Module-level references for deactivate() access
+let extensionContext: vscode.ExtensionContext | undefined;
+let globalStoragePath: string | undefined;
+
+// Load CWD map from persistent storage (prefer file over globalState for crash safety)
 function loadCwdMap(context: vscode.ExtensionContext) {
-    const savedMap = context.globalState.get<Record<string, string>>(CWD_MAP_KEY);
+    // Try file first (more reliable after crashes)
+    let savedMap: Record<string, string> | undefined;
+    if (globalStoragePath) {
+        savedMap = readCwdMapFile(globalStoragePath);
+        if (savedMap) {
+            console.log(`TerminalGrid: Loaded CWD map from file`);
+        }
+    }
+    // Fall back to globalState
+    if (!savedMap) {
+        savedMap = context.globalState.get<Record<string, string>>(CWD_MAP_KEY);
+        if (savedMap) {
+            console.log(`TerminalGrid: Loaded CWD map from globalState (file not found)`);
+        }
+    }
     if (savedMap) {
         for (const [key, value] of Object.entries(savedMap)) {
             terminalCwdMap.set(key, value);
         }
-        console.log(`TerminalGrid: Loaded ${terminalCwdMap.size} CWD entries from storage`);
+        console.log(`TerminalGrid: Loaded ${terminalCwdMap.size} CWD entries`);
     }
 }
 
-// Save CWD map to persistent storage
+// Save CWD map to persistent storage (both globalState and file)
 function saveCwdMap(context: vscode.ExtensionContext) {
     const mapObj: Record<string, string> = {};
     for (const [key, value] of terminalCwdMap.entries()) {
         mapObj[key] = value;
     }
     context.globalState.update(CWD_MAP_KEY, mapObj);
-    console.log(`TerminalGrid: Saved ${terminalCwdMap.size} CWD entries to storage`);
+    // Also write to file for crash safety
+    if (globalStoragePath) {
+        writeCwdMapFile(globalStoragePath, mapObj);
+    }
+    console.log(`TerminalGrid: Saved ${terminalCwdMap.size} CWD entries to storage + file`);
 }
 
 // Icons for terminal creation
@@ -599,8 +621,13 @@ async function saveTerminalState(context: vscode.ExtensionContext, gracefulExit:
         editorLayout: collected.editorLayout
     };
 
+    // Write to file FIRST (synchronous, crash-safe)
+    if (globalStoragePath) {
+        writeStateFile(globalStoragePath, state);
+    }
+    // Also write to globalState as backup
     await context.globalState.update(TERMINAL_STATE_KEY, state);
-    console.log(`TerminalGrid: Saved ${collected.terminals.length} terminal states with layout to globalState`);
+    console.log(`TerminalGrid: Saved ${collected.terminals.length} terminal states to file + globalState`);
 }
 
 /**
@@ -688,16 +715,30 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         return false;
     }
 
-    const state = context.globalState.get<TerminalState>(TERMINAL_STATE_KEY);
-    console.log('TerminalGrid: Loaded state from globalState:', state);
+    // Try file first (more reliable after crashes), fall back to globalState
+    let state: TerminalState | undefined;
+    if (globalStoragePath) {
+        state = readStateFile<TerminalState>(globalStoragePath);
+        if (state) {
+            console.log('TerminalGrid: Loaded state from file:', state);
+        }
+    }
+    if (!state) {
+        state = context.globalState.get<TerminalState>(TERMINAL_STATE_KEY);
+        if (state) {
+            console.log('TerminalGrid: Loaded state from globalState (file not found):', state);
+        }
+    }
 
     if (!state) {
+        console.log('TerminalGrid: No saved state found in file or globalState');
         return false;
     }
 
     // If last session exited gracefully, VS Code's built-in persistence should handle it
     if (state.gracefulExit) {
         console.log('TerminalGrid: Last session exited gracefully, skipping restore');
+        if (globalStoragePath) { deleteStateFile(globalStoragePath); }
         await context.globalState.update(TERMINAL_STATE_KEY, undefined);
         return false;
     }
@@ -708,6 +749,7 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
 
     if (ageMs > maxAgeMs) {
         console.log('TerminalGrid: Saved state too old, skipping restore');
+        if (globalStoragePath) { deleteStateFile(globalStoragePath); }
         await context.globalState.update(TERMINAL_STATE_KEY, undefined);
         return false;
     }
@@ -809,7 +851,8 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
         // Ignore if command not available
     }
 
-    // Clear the saved state after restore
+    // Clear the saved state after restore (both file and globalState)
+    if (globalStoragePath) { deleteStateFile(globalStoragePath); }
     await context.globalState.update(TERMINAL_STATE_KEY, undefined);
 
     vscode.window.showInformationMessage(
@@ -819,19 +862,30 @@ async function restoreTerminals(context: vscode.ExtensionContext): Promise<boole
     return true;
 }
 
+let saveInProgress = false;
+
 function startPeriodicSave(context: vscode.ExtensionContext) {
     if (saveInterval) {
         clearInterval(saveInterval);
     }
 
     saveInterval = setInterval(async () => {
-        // Refresh CWD tracking for all terminals before saving
-        for (const terminal of vscode.window.terminals) {
-            await trackTerminalCwd(terminal);
+        // Prevent overlapping saves
+        if (saveInProgress) {
+            return;
         }
-        saveTerminalState(context);
-        // Also persist the CWD map
-        saveCwdMap(context);
+        saveInProgress = true;
+        try {
+            // Refresh CWD tracking for all terminals before saving
+            for (const terminal of vscode.window.terminals) {
+                await trackTerminalCwd(terminal);
+            }
+            await saveTerminalState(context);
+            // Also persist the CWD map
+            saveCwdMap(context);
+        } finally {
+            saveInProgress = false;
+        }
     }, SAVE_INTERVAL_MS);
 }
 
@@ -974,6 +1028,11 @@ async function deduplicateExistingTerminals() {
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log('TerminalGrid is now active');
+
+    // Store context and storage path for deactivate() and file-based persistence
+    extensionContext = context;
+    globalStoragePath = context.globalStorageUri.fsPath;
+    console.log(`TerminalGrid: Global storage path: ${globalStoragePath}`);
 
     // Load persisted CWD map FIRST (before any terminal operations)
     loadCwdMap(context);
@@ -1374,7 +1433,7 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 }
 
-export async function deactivate() {
+export function deactivate() {
     // Stop periodic saves
     if (saveInterval) {
         clearInterval(saveInterval);
@@ -1387,9 +1446,18 @@ export async function deactivate() {
         iconUpdateInterval = undefined;
     }
 
-    // Note: We can't reliably save state here during a crash
-    // The periodic saves handle crash recovery
-    // For graceful exits, we mark it so VS Code's built-in persistence takes over
+    // Mark graceful exit using synchronous file write (reliable even during shutdown).
+    // globalState.update() is async and may not flush before VS Code exits,
+    // but writeFileSync guarantees the data hits disk.
+    if (globalStoragePath) {
+        const gracefulState: TerminalState = {
+            terminals: [],
+            savedAt: Date.now(),
+            gracefulExit: true,
+        };
+        writeStateFile(globalStoragePath, gracefulState);
+        console.log('TerminalGrid: Marked graceful exit via file');
+    }
 
     console.log('TerminalGrid deactivating');
 }

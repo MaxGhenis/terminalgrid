@@ -1,3 +1,100 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
+const STATE_FILENAME = 'terminal-state.json';
+const CWD_MAP_FILENAME = 'cwd-map.json';
+
+/**
+ * Get the file path for persisted state within the extension's global storage
+ */
+export function getStateFilePath(globalStoragePath: string): string {
+    return path.join(globalStoragePath, STATE_FILENAME);
+}
+
+/**
+ * Get the file path for persisted CWD map within the extension's global storage
+ */
+export function getCwdMapFilePath(globalStoragePath: string): string {
+    return path.join(globalStoragePath, CWD_MAP_FILENAME);
+}
+
+/**
+ * Write terminal state to a file on disk synchronously.
+ * Uses writeFileSync to guarantee the data is flushed before returning,
+ * which is critical for surviving crashes.
+ */
+export function writeStateFile(globalStoragePath: string, state: object): void {
+    try {
+        fs.mkdirSync(globalStoragePath, { recursive: true });
+        const filePath = getStateFilePath(globalStoragePath);
+        fs.writeFileSync(filePath, JSON.stringify(state), 'utf-8');
+    } catch (error) {
+        console.error('TerminalGrid: Failed to write state file:', error);
+    }
+}
+
+/**
+ * Read terminal state from the file on disk.
+ * Returns undefined if the file doesn't exist or can't be parsed.
+ */
+export function readStateFile<T>(globalStoragePath: string): T | undefined {
+    try {
+        const filePath = getStateFilePath(globalStoragePath);
+        if (!fs.existsSync(filePath)) {
+            return undefined;
+        }
+        const content = fs.readFileSync(filePath, 'utf-8');
+        return JSON.parse(content) as T;
+    } catch (error) {
+        console.error('TerminalGrid: Failed to read state file:', error);
+        return undefined;
+    }
+}
+
+/**
+ * Delete the state file (after successful restore).
+ */
+export function deleteStateFile(globalStoragePath: string): void {
+    try {
+        const filePath = getStateFilePath(globalStoragePath);
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+    } catch (error) {
+        console.error('TerminalGrid: Failed to delete state file:', error);
+    }
+}
+
+/**
+ * Write CWD map to a file on disk synchronously.
+ */
+export function writeCwdMapFile(globalStoragePath: string, cwdMap: Record<string, string>): void {
+    try {
+        fs.mkdirSync(globalStoragePath, { recursive: true });
+        const filePath = getCwdMapFilePath(globalStoragePath);
+        fs.writeFileSync(filePath, JSON.stringify(cwdMap), 'utf-8');
+    } catch (error) {
+        console.error('TerminalGrid: Failed to write CWD map file:', error);
+    }
+}
+
+/**
+ * Read CWD map from file on disk.
+ */
+export function readCwdMapFile(globalStoragePath: string): Record<string, string> | undefined {
+    try {
+        const filePath = getCwdMapFilePath(globalStoragePath);
+        if (!fs.existsSync(filePath)) {
+            return undefined;
+        }
+        const content = fs.readFileSync(filePath, 'utf-8');
+        return JSON.parse(content) as Record<string, string>;
+    } catch (error) {
+        console.error('TerminalGrid: Failed to read CWD map file:', error);
+        return undefined;
+    }
+}
+
 /**
  * Extract the folder name from a path
  * @param cwd - The directory path
@@ -122,15 +219,6 @@ export function normalizeForMatch(name: string): string {
  * @returns Array of folder paths sorted alphabetically
  */
 export function scanProjectFolders(searchPaths: string[]): string[] {
-    let fs: typeof import('fs');
-    let path: typeof import('path');
-    try {
-        fs = require('fs');
-        path = require('path');
-    } catch {
-        return [];
-    }
-
     const folders: Set<string> = new Set();
 
     for (const searchPath of searchPaths) {
@@ -318,16 +406,6 @@ export function getGridCellGroup(row: number, col: number, rows: number, cols: n
  * @returns Path if found, undefined otherwise
  */
 export function inferCwdFromName(name: string, searchPaths: string[]): string | undefined {
-    // Import fs dynamically to avoid issues in test environment
-    let fs: typeof import('fs');
-    let path: typeof import('path');
-    try {
-        fs = require('fs');
-        path = require('path');
-    } catch {
-        return undefined;
-    }
-
     // Normalize name for matching (handles underscore/hyphen equivalence)
     const normalizedName = normalizeForMatch(name);
 

@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName, normalizeForMatch, scanProjectFolders, groupTerminalsByViewColumn, getSortedViewColumns, createRestorePlan } from '../utils';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { getFolderName, createFolderQuickPickItems, isBrowseOption, isClaudeProcess, parseProcessList, hasClaudeInProcessList, deduplicateTerminalsByCwd, hasDuplicateCwds, inferCwdFromName, normalizeForMatch, scanProjectFolders, groupTerminalsByViewColumn, getSortedViewColumns, createRestorePlan, writeStateFile, readStateFile, deleteStateFile, writeCwdMapFile, readCwdMapFile, getStateFilePath, getCwdMapFilePath } from '../utils';
 
 describe('getFolderName', () => {
     it('should return the last folder name from a path', () => {
@@ -636,5 +639,126 @@ describe('getGridCellGroup', () => {
         expect(getGridCellGroup(1, 0, 2, 3)).toBe(4);
         expect(getGridCellGroup(1, 1, 2, 3)).toBe(5);
         expect(getGridCellGroup(1, 2, 2, 3)).toBe(6);
+    });
+});
+
+// File-based persistence tests
+describe('file-based persistence', () => {
+    let tmpDir: string;
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'terminalgrid-test-'));
+    });
+
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    describe('getStateFilePath / getCwdMapFilePath', () => {
+        it('should return correct paths', () => {
+            expect(getStateFilePath('/foo/bar')).toBe('/foo/bar/terminal-state.json');
+            expect(getCwdMapFilePath('/foo/bar')).toBe('/foo/bar/cwd-map.json');
+        });
+    });
+
+    describe('writeStateFile / readStateFile', () => {
+        it('should round-trip state through file', () => {
+            const state = {
+                terminals: [{ cwd: '/path/to/project', name: 'project', viewColumn: 1 }],
+                savedAt: Date.now(),
+                gracefulExit: false,
+            };
+
+            writeStateFile(tmpDir, state);
+            const loaded = readStateFile<typeof state>(tmpDir);
+
+            expect(loaded).toEqual(state);
+        });
+
+        it('should create directory if it does not exist', () => {
+            const nested = path.join(tmpDir, 'deep', 'nested');
+            writeStateFile(nested, { test: true });
+
+            expect(fs.existsSync(path.join(nested, 'terminal-state.json'))).toBe(true);
+        });
+
+        it('should return undefined when file does not exist', () => {
+            const result = readStateFile(path.join(tmpDir, 'nonexistent'));
+            expect(result).toBeUndefined();
+        });
+
+        it('should return undefined for invalid JSON', () => {
+            fs.writeFileSync(path.join(tmpDir, 'terminal-state.json'), 'not json');
+            const result = readStateFile(tmpDir);
+            expect(result).toBeUndefined();
+        });
+
+        it('should overwrite existing state file', () => {
+            writeStateFile(tmpDir, { version: 1 });
+            writeStateFile(tmpDir, { version: 2 });
+
+            const loaded = readStateFile<{ version: number }>(tmpDir);
+            expect(loaded?.version).toBe(2);
+        });
+
+        it('should persist data synchronously (survives simulated crash)', () => {
+            const state = {
+                terminals: [
+                    { cwd: '/project-a', name: 'a', viewColumn: 1 },
+                    { cwd: '/project-b', name: 'b', viewColumn: 2 },
+                ],
+                savedAt: 1234567890,
+                gracefulExit: false,
+            };
+
+            writeStateFile(tmpDir, state);
+
+            // Simulate "crash" by reading from a fresh process perspective
+            const raw = fs.readFileSync(getStateFilePath(tmpDir), 'utf-8');
+            const parsed = JSON.parse(raw);
+            expect(parsed.terminals).toHaveLength(2);
+            expect(parsed.terminals[0].cwd).toBe('/project-a');
+            expect(parsed.gracefulExit).toBe(false);
+        });
+    });
+
+    describe('deleteStateFile', () => {
+        it('should delete existing state file', () => {
+            writeStateFile(tmpDir, { test: true });
+            expect(fs.existsSync(getStateFilePath(tmpDir))).toBe(true);
+
+            deleteStateFile(tmpDir);
+            expect(fs.existsSync(getStateFilePath(tmpDir))).toBe(false);
+        });
+
+        it('should not throw when file does not exist', () => {
+            expect(() => deleteStateFile(tmpDir)).not.toThrow();
+        });
+    });
+
+    describe('writeCwdMapFile / readCwdMapFile', () => {
+        it('should round-trip CWD map through file', () => {
+            const cwdMap = {
+                'project-default': '/Users/max/project',
+                'other-default': '/Users/max/other',
+            };
+
+            writeCwdMapFile(tmpDir, cwdMap);
+            const loaded = readCwdMapFile(tmpDir);
+
+            expect(loaded).toEqual(cwdMap);
+        });
+
+        it('should return undefined when file does not exist', () => {
+            expect(readCwdMapFile(path.join(tmpDir, 'nonexistent'))).toBeUndefined();
+        });
+
+        it('should overwrite existing CWD map', () => {
+            writeCwdMapFile(tmpDir, { a: '/old' });
+            writeCwdMapFile(tmpDir, { b: '/new' });
+
+            const loaded = readCwdMapFile(tmpDir);
+            expect(loaded).toEqual({ b: '/new' });
+        });
     });
 });
